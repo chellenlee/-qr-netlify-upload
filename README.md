@@ -1,30 +1,19 @@
-# QRコードデータアップロードアプリ
+# 橘湾岸QR2025春（Netlify Functions版）
 
-このアプリは、マラソン等のイベントにおいて、QRコードから読み取った通過情報をCSVとして記録し、
-DropboxにアップロードするWebアプリです。Netlify Functionsを使用し、安全なAPIキー管理を実現します。
+このPWAは、マラソン計測現場でQRコードを読み取り、DropboxへCSV保存＆閲覧できるWebアプリです。
+アクセストークンはNetlify Functions経由で安全に扱われます。
 
-## 構成
+## 必要環境
 
-- `public/index.html` : フロントエンドUI
-- `netlify/functions/upload.js` : DropboxへのCSVアップロード
-- `netlify/functions/check.js` : DropboxからCSV取得・統合
-- `netlify.toml` : Netlifyビルド設定
+- Netlify（無料アカウント）
+- GitHub（コード管理）
+- Dropboxアクセストークン（`DROPBOX_TOKEN`）をNetlifyに設定
 
-## セットアップ手順（GitHub連携用）
+## デプロイ手順
 
-1. GitHubに新しいリポジトリを作成
-2. 本プロジェクトの内容をアップロード
-3. Netlifyにログインし、「Add new site」→「Import from Git」からGitHub連携
-4. ビルド設定は以下の通り：
-
-```
-Publish directory: public
-Build command: （空欄）
-```
-
-5. DropboxのアクセストークンをNetlifyの環境変数 `DROPBOX_TOKEN` に追加
-
-## 注意
-
-- このリポジトリにはDropboxのアクセストークンを含めないでください
-- 本番環境ではHTTPS上での動作を確認してください
+1. GitHubにこのフォルダ一式をアップロード
+2. Netlifyで「New Site from Git」を選択し、このリポジトリを指定
+3. 環境変数に `DROPBOX_TOKEN` を設定
+4. ビルド設定：
+   - Publish directory: `public`
+   - Build command: 空欄でOK
