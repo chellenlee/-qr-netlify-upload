@@ -108,11 +108,7 @@
 <button class="start-button" onclick="confirmChange()">開始/変更</button>
 <!-- 保存ボタンを追加 -->
 <button class="save-button" onclick="uploadToDropbox()">アップロード</button><button class="check-button" onclick="checkUploadedData()">データ確認</button>
-<div style="margin-top: 30px; text-align: left;">
-<br/>
-<input accept=".csv" id="csvFileInput" multiple="" style="font-size: 20px; padding: 6px 10px;" type="file">
-<br/>
-</input></div>
+
 </div>
 <div id="reader" style="display:none;">
 <h3 id="message">読み取り中...</h3>
@@ -461,13 +457,27 @@ function uploadToDropbox() {
   fetch("/.netlify/functions/upload", {
     method: "POST",
     body: formData
-  }).then(res => res.json()).then(data => {
-    if (data.success) {
+  })
+  .then(async res => {
+    let data;
+    try {
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        data = { success: false, error: `無効な応答（HTTP ${res.status}）` };
+      }
+    } catch (e) {
+      data = { success: false, error: `JSON解析失敗（HTTP ${res.status}）` };
+    }
+
+    if (res.ok && data.success) {
       alert("Dropboxにアップロードしました。");
     } else {
-      alert("アップロードに失敗しました: " + data.error);
+      alert("アップロードに失敗しました: " + (data.error || `HTTP ${res.status}`));
     }
-  }).catch(err => {
+  })
+  .catch(err => {
     alert("通信エラー: " + err.message);
   });
 }
