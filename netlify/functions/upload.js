@@ -28,7 +28,6 @@ exports.handler = async (event) => {
     });
 
     if (!response.ok) throw new Error(await response.text());
-
     return { statusCode: 200, body: "Upload successful" };
   } catch (err) {
     return { statusCode: 500, body: `Upload failed: ${err.message}` };

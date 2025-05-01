@@ -20,7 +20,7 @@ exports.handler = async (event) => {
 
     const listData = await listRes.json();
     const csvFiles = listData.entries.filter(
-      file => file.name.includes(staffName) && file.name.endsWith(".csv")
+      file => file.name.includes(staffName) && file.name.endswith(".csv")
     );
 
     const csvContents = await Promise.all(csvFiles.map(file => 
