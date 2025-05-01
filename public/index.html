@@ -444,10 +444,33 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
 </script>
 <script>
 // アップロード処理
-const DROPBOX_ACCESS_TOKEN = "sl.u.AFuLJQPJ13nPLSSik2XRRGLu0HkIC_GVlUIzHrl2T4maGHvU5Q5EBRl3w-b4idyjknIZedYAhmos8uCtrgd_KxPCAOVvOWQzLQ29b_WLDkpAx480DtxHfR39eYHPXmnALzJoNT0_Iua93PK1DPbjFJBEuSG0_VE4SHxYV0WOPOBACYTvTAWaSCVl6a8oT1yoOtUm-unkfaxjGHBtdn3yQzfu5W0MM4esfMRAc0Zcc1hJJd3plhMO959YM4VhN4Z01YQD0ZOwhNOqI3KJD3juB_IvMaw31-38ej3jtPzgv3kA3R7itRgqXnmQqZZu6Ld4ueZEBVcAnG_Qv9Y_6GSTOBKKDUFvtOnv4uXVawbsOtKTrt38GpT-SZ8eAVU_UjGSl7BjZYUYWLyJrlvW68FgQIuJr98ezZp53sXZ2b3LoTy7bKHRDsAgC7PPZ-w5C7EHLiwz1iskRKhlsXwRPlEG2XcqlfzH92mudTgmElgNFisF5sWgn-txIDW0O5YqmTreuPu0RL6xfeHl0qSvBz-4_2ZPbcSX7v3_MR9CJVJ40u2In76-J-crBiXr7EacBAzSCb5c8CLsIYk8hlU4rlCX8eer4D7BRtP2ccRn_mFav62hCpj2JuPqJGrOx2GiCEePq3wneSPq3mvNKaSdDaIpSPp4y-XherwQe3Q8Ht9lXnUkiVl5kNfrjEVC7Voqc-TVsfuap_IPtpnI-EKu4EriTy9CAzcJqIh4FWqN_UrsOp6kHRwLq4NArM2pUJpU6x-jnoEzNA3ex84UU8eXjG8D-4Bp1cYcEVZqFrmETTLJngiemhpm1ro-vojpYDMuPEc2OcjOvW2-t8kz2-RVe3FUvkTuVDinlUcmOCyFTRfxYHunfVfunUlrL8w4zrzlLD5a9KEKM78CC_7U5U1T-gayaPQLL-DhBeLQBkC-WyQNjI8J-mTdAHMyvHQ4WCBngu4N7Ro1bznjdWEFdQ8wgKnZLX5Gq2Gs4gUj6mWn1zecojjNMeg75IzU9DieSkxU92S3yWsJgQ0WcbQ2HbnKJ9VVrwjh1EVPGUiBwDXeOVKk7_5xXZbxwVYhlQCxZoS83b2Jdl4MzeyF2A1AeIuZzTtabFfZarEfCo5Rw1mwkoVHmU0sZpD0oKaNERU6Dtq1Fh-zAHf0DRj-XX0G5KPFUcBvVOrzPl3clfjgverJmoryW760H7OAO-r48s53JpapbUWPgXLra3YdT0gyKFqzPT9IjzO5MTLXtIcVm7BUZSrXNGMIDaUcITQgi5p-KB9NYrEiAliRSai9rHEUT0osmTu-HV0_ZXnSk8z4YQ12t0_MA6BPGg";
+// const DROPBOX_ACCESS_TOKEN = "sl.u.AFuLJQPJ13nPLSSik2XRRGLu0HkIC_GVlUIzHrl2T4maGHvU5Q5EBRl3w-b4idyjknIZedYAhmos8uCtrgd_KxPCAOVvOWQzLQ29b_WLDkpAx480DtxHfR39eYHPXmnALzJoNT0_Iua93PK1DPbjFJBEuSG0_VE4SHxYV0WOPOBACYTvTAWaSCVl6a8oT1yoOtUm-unkfaxjGHBtdn3yQzfu5W0MM4esfMRAc0Zcc1hJJd3plhMO959YM4VhN4Z01YQD0ZOwhNOqI3KJD3juB_IvMaw31-38ej3jtPzgv3kA3R7itRgqXnmQqZZu6Ld4ueZEBVcAnG_Qv9Y_6GSTOBKKDUFvtOnv4uXVawbsOtKTrt38GpT-SZ8eAVU_UjGSl7BjZYUYWLyJrlvW68FgQIuJr98ezZp53sXZ2b3LoTy7bKHRDsAgC7PPZ-w5C7EHLiwz1iskRKhlsXwRPlEG2XcqlfzH92mudTgmElgNFisF5sWgn-txIDW0O5YqmTreuPu0RL6xfeHl0qSvBz-4_2ZPbcSX7v3_MR9CJVJ40u2In76-J-crBiXr7EacBAzSCb5c8CLsIYk8hlU4rlCX8eer4D7BRtP2ccRn_mFav62hCpj2JuPqJGrOx2GiCEePq3wneSPq3mvNKaSdDaIpSPp4y-XherwQe3Q8Ht9lXnUkiVl5kNfrjEVC7Voqc-TVsfuap_IPtpnI-EKu4EriTy9CAzcJqIh4FWqN_UrsOp6kHRwLq4NArM2pUJpU6x-jnoEzNA3ex84UU8eXjG8D-4Bp1cYcEVZqFrmETTLJngiemhpm1ro-vojpYDMuPEc2OcjOvW2-t8kz2-RVe3FUvkTuVDinlUcmOCyFTRfxYHunfVfunUlrL8w4zrzlLD5a9KEKM78CC_7U5U1T-gayaPQLL-DhBeLQBkC-WyQNjI8J-mTdAHMyvHQ4WCBngu4N7Ro1bznjdWEFdQ8wgKnZLX5Gq2Gs4gUj6mWn1zecojjNMeg75IzU9DieSkxU92S3yWsJgQ0WcbQ2HbnKJ9VVrwjh1EVPGUiBwDXeOVKk7_5xXZbxwVYhlQCxZoS83b2Jdl4MzeyF2A1AeIuZzTtabFfZarEfCo5Rw1mwkoVHmU0sZpD0oKaNERU6Dtq1Fh-zAHf0DRj-XX0G5KPFUcBvVOrzPl3clfjgverJmoryW760H7OAO-r48s53JpapbUWPgXLra3YdT0gyKFqzPT9IjzO5MTLXtIcVm7BUZSrXNGMIDaUcITQgi5p-KB9NYrEiAliRSai9rHEUT0osmTu-HV0_ZXnSk8z4YQ12t0_MA6BPGg";
 
 
 function uploadToDropbox() {
+  if (!scannedData || scannedData.length === 0) {
+    alert("アップロードするデータがありません。");
+    return;
+  }
+
+  const csv = generateCSV();
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+  const formData = new FormData();
+  formData.append("file", blob, "upload.csv");
+
+  fetch("/.netlify/functions/upload", {
+    method: "POST",
+    body: formData
+  }).then(res => res.json()).then(data => {
+    if (data.success) {
+      alert("Dropboxにアップロードしました。");
+    } else {
+      alert("アップロードに失敗しました: " + data.error);
+    }
+  }).catch(err => {
+    alert("通信エラー: " + err.message);
+  });
+}
   if (!scannedData || scannedData.length === 0) {
     alert("アップロードするデータがありません。");
     return;
@@ -479,6 +502,64 @@ function uploadToDropbox() {
 
 // データ確認処理
 function checkUploadedData() {
+  const staffName = localStorage.getItem('staffName');
+  if (!staffName) {
+    alert("担当者名が設定されていません。");
+    return;
+  }
+
+  fetch("/.netlify/functions/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staffName })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const csvTexts = data.files;
+    let recordMap = new Map();
+    csvTexts.forEach(text => {
+      const rows = text.trim().split("\n").slice(1);
+      rows.forEach(row => {
+        const cols = row.split(",");
+        const key = `${cols[0]}_${cols[2]}`;
+        const datetime = `${cols[5]} ${cols[6]}`;
+        if (!recordMap.has(key) || datetime < recordMap.get(key).datetime) {
+          recordMap.set(key, { row: cols, datetime });
+        }
+      });
+    });
+
+    const combined = [...recordMap.values()].map(v => v.row);
+    combined.sort((a, b) => {
+      if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
+      return `${a[5]} ${a[6]}`.localeCompare(`${b[5]} ${b[6]}`);
+    });
+
+    const table = document.createElement("table");
+    table.border = "1";
+    const header = ["地点", "部門", "ゼッケン番号", "氏名", "性別", "日付", "時刻", "担当者"];
+    const thead = table.insertRow();
+    header.forEach(h => thead.insertCell().textContent = h);
+    combined.forEach(row => {
+      const tr = table.insertRow();
+      row.forEach(col => tr.insertCell().textContent = col);
+    });
+
+    let result = document.getElementById("result");
+    if (!result) {
+      result = document.createElement("div");
+      result.id = "result";
+      document.body.appendChild(result);
+    }
+    result.innerHTML = "";
+    result.appendChild(table);
+    result.style.display = "";
+  })
+  .catch(err => {
+    alert("データの取得に失敗しました");
+    console.error(err);
+  });
+}
   const staffName = localStorage.getItem('staffName');
   if (!staffName) {
     alert("担当者名が設定されていません。");
