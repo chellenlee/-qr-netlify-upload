@@ -1,4 +1,5 @@
 const { Dropbox } = require('dropbox');
+const fetch = require('node-fetch');  // fetch追加
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -16,7 +17,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN });
+  const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
 
   try {
     const folderRes = await dbx.filesListFolder({ path: '/QRデータ' });

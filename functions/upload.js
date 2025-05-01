@@ -1,5 +1,6 @@
 const { Dropbox } = require('dropbox');
 const multiparty = require('multiparty');
+const fetch = require('node-fetch');  // fetch追加
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -14,7 +15,7 @@ exports.handler = async (event) => {
       }
 
       const file = files.file[0];
-      const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN });
+      const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
 
       try {
         const result = await dbx.filesUpload({
