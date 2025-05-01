@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "dependencies": {
     "dropbox": "^10.34.0",
-    "multiparty": "^4.2.2"
+    "multiparty": "^4.2.2",
+    "node-fetch": "^2.6.7"
   }
 }
