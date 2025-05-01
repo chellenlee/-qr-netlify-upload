@@ -1,7 +1,5 @@
 const { Dropbox } = require('dropbox');
 const fetch = require('node-fetch');
-const multiparty = require('multiparty');
-const fs = require('fs');
 
 exports.handler = async (event) => {
   console.log("HTTP Method:", event.httpMethod);
@@ -30,32 +28,48 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
-  const form = new multiparty.Form();
-  return new Promise((resolve, reject) => {
-    form.parse({ headers: event.headers, body: Buffer.from(event.body, 'base64') }, async (err, fields, files) => {
-      if (err) {
-        console.error("Form parse error:", err);
-        return resolve({ statusCode: 500, body: JSON.stringify({ error: 'Form parsing failed' }) });
-      }
+  try {
+    const contentType = event.headers['content-type'] || event.headers['Content-Type'];
+    const boundaryMatch = contentType.match(/boundary=(.+)$/);
+    if (!boundaryMatch) throw new Error("No boundary found in content-type");
 
-      try {
-        const file = files.file[0];
+    const boundary = boundaryMatch[1];
+    const bodyBuffer = Buffer.from(event.body, 'base64');
+    const parts = bodyBuffer.toString('utf8').split(`--${boundary}`);
+
+    for (let part of parts) {
+      if (part.includes('Content-Disposition') && part.includes('filename=')) {
+        const [, headers, content] = part.split(/\r\n\r\n/);
+        const nameMatch = headers.match(/name="(.+?)"/);
+        const filenameMatch = headers.match(/filename="(.+?)"/);
+        if (!filenameMatch) continue;
+
+        const fileName = filenameMatch[1].trim();
+        const fileContent = content.trimEnd();  // drop final 
+-- if present
+
         const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
-
         const result = await dbx.filesUpload({
-          path: `/QRデータ/${file.originalFilename}`,
-          contents: fs.readFileSync(file.path),
+          path: `/QRデータ/${fileName}`,
+          contents: Buffer.from(fileContent, 'utf8'),
           mode: 'add',
           autorename: true,
           mute: false
         });
 
-        console.log("Upload successful:", result.path_display);
-        resolve({ statusCode: 200, body: JSON.stringify({ success: true, path: result.path_display }) });
-      } catch (error) {
-        console.error("Dropbox upload error:", error);
-        resolve({ statusCode: 500, body: JSON.stringify({ success: false, error: error.message }) });
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ success: true, path: result.path_display })
+        };
       }
-    });
-  });
+    }
+
+    return { statusCode: 400, body: JSON.stringify({ error: "No file found in form data" }) };
+  } catch (err) {
+    console.error("Upload error:", err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ success: false, error: err.message })
+    };
+  }
 };
