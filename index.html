@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>橘湾岸ＱＲ2025春</title>
+<link href="manifest.json" rel="manifest"/>
+<link href="icon.png" rel="icon" type="image/png"/>
+<meta content="#003366" name="theme-color"/>
+<script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
+        console.log('ServiceWorker registered with scope:', registration.scope);
+      }).catch(function(error) {
+        console.log('ServiceWorker registration failed:', error);
+      });
+    }
+  </script>
+<style>
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; font-size: 18px; }
+    #title-banner {
+      background-color: #003366; /* 紺色背景 */
+      color: white;              /* 白抜き文字 */
+      padding: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+    }
+    #setup, #reader, #result, #history { margin: 20px; }
+    #setup input, #setup select {
+      text-align: left;
+      text-indent: 2em;
+      width: 80%;
+      margin-bottom: 10px;
+      font-size: 20px;  /* 入力フィールドと選択肢のフォントサイズを20px */
+    }
+    video {
+      width: 90vw;
+      height: 65vh;               /* 65%に変更 */
+      margin-top: 10px;
+      object-fit: cover;          /* 強制フィット */
+    }
+    table { width: 95%; margin: 10px auto; border-collapse: collapse; font-size: 18px; }
+    th, td { border: 1px solid #ccc; padding: 10px; font-size: 18px; }
+    input, select, button { padding: 12px; font-size: 20px; margin: 8px; }
+    #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
+
+    .save-button, .start-button {
+      background: linear-gradient(#888888, #666666);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 20px;
+      border-radius: 8px;
+      box-shadow: 0 5px #444444;
+      cursor: pointer;
+      display: inline-block;
+    }
+    .save-button:active, .start-button:active {
+      box-shadow: 0 2px #444444;
+      transform: translateY(3px);
+    }
+
+    #popup-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    #popup {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      width: 80%;
+      max-width: 400px;
+    }
+    #popup h2 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    #popup p {
+      margin: 5px 0;
+      font-size: 20px;
+    }
+    #popup button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+<div id="title-banner">橘湾岸ＱＲ2025春</div>
+<div id="setup">
+<h2 style="text-align:left; margin-left: 2em;">担当者名と地点を設定</h2>
+<input id="staffName" placeholder="担当者名を入力" type="text"/>
+<br/>
+<select id="location">
+<option value="">地点を選択</option>
+</select>
+<br/>
+<button class="start-button" onclick="confirmChange()">開始/変更</button>
+<!-- 保存ボタンを追加 -->
+<button class="save-button" onclick="uploadToDropbox()">アップロード</button><button class="check-button" onclick="checkUploadedData()">データ確認</button>
+<div style="margin-top: 30px; text-align: left;">
+<br/>
+<input accept=".csv" id="csvFileInput" multiple="" style="font-size: 20px; padding: 6px 10px;" type="file">
+<br/>
+</input></div>
+</div>
+<div id="reader" style="display:none;">
+<h3 id="message">読み取り中...</h3>
+<video id="video" playsinline=""></video>
+<br/>
+<button class="save-button" onclick="uploadToDropbox()">アップロード</button>
+<!-- 右下に終了ボタンを追加 -->
+<button class="save-button" onclick="endApp()">終了</button>
+</div>
+<div id="result" style="display:none;">
+<div id="latest"></div>
+</div>
+<div id="history" style="display:none;">
+<h3>読み取り履歴</h3>
+<table>
+<thead>
+<tr>
+<th>地点ID</th><th>地点名</th><th>部門</th><th>ゼッケン</th><th>氏名</th><th>性別</th><th>日付</th><th>時刻</th><th>担当者</th>
+</tr>
+</thead>
+<tbody id="historyTable"></tbody>
+</table>
+</div>
+<div id="popup-overlay">
+<div id="popup">
+<h2 id="popup-title">チェックOK</h2>
+<p id="popup-info"></p>
+<button onclick="continueScan()">OK</button>
+<button onclick="endApp()">終了</button>
+</div>
+</div>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script>
+let staff = '';
+let selectedLocationId = '';
+let selectedLocationName = '';
+let scannedData = [];
+let codeReader = null;
+let currentScan = {};
+
+const locations = [
+  {id:1, name:"【受付】"}, {id:2, name:"【スタート】"}, {id:3, name:"【ゴール】"}, {id:4, name:"【Lダッシュ】"}, {id:5, name:"【リタイヤ】"},
+  {id:6, name:"城山台"}, {id:7, name:"日並"}, {id:8, name:"鳴見ダム"}, {id:9, name:"あぐりの丘"}, {id:10, name:"福田霊園"},
+  {id:11, name:"女神大橋"}, {id:12, name:"江川交差点"}, {id:13, name:"伊王島大橋（往路到着）"}, {id:14, name:"伊王島灯台"}, {id:15, name:"伊王島大橋（復路出発）"},
+  {id:16, name:"大籠"}, {id:17, name:"以下宿"}, {id:18, name:"恐竜体育館"}, {id:19, name:"権現山公園"}, {id:20, name:"樺島公民館（往路到着）"},
+  {id:21, name:"樺島灯台"}, {id:22, name:"樺島公民館（復路出発）"}, {id:23, name:"自転車道入口"}, {id:24, name:"川原公民館"}, {id:25, name:"茂木ぶらぶら"},
+  {id:26, name:"女神大橋（M）"}, {id:27, name:"鍋冠山（M）"}, {id:28, name:"茂木支所（M）"}, {id:29, name:"日見公園"}, {id:30, name:"飯盛峠とんの山"},
+  {id:31, name:"飯盛経塚"}, {id:32, name:"有喜老人ホーム"}, {id:33, name:"唐比温泉センター"}, {id:34, name:"千々石"}
+];
+
+window.onload = function() {
+  const savedStaff = localStorage.getItem('staffName');
+  const savedHistory = localStorage.getItem('history');
+  if (savedStaff) document.getElementById('staffName').value = savedStaff;
+  if (savedHistory) scannedData = JSON.parse(savedHistory);
+
+  const locationSelect = document.getElementById('location');
+  locations.forEach(loc => {
+    const option = document.createElement('option');
+    option.value = loc.id;
+    option.textContent = loc.name;
+    locationSelect.appendChild(option);
+  });
+};
+
+function confirmChange() {
+  const newLocationId = document.getElementById('location').value;
+  const staffName = document.getElementById('staffName').value.trim();
+
+  if (!staffName || !newLocationId) {
+    showCustomPopup({
+      title: "確認",
+      message: "担当者名と地点を入力・選択してください。",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+
+  if (selectedLocationId !== newLocationId && scannedData.length > 0) {
+    showCustomPopup({
+      title: "確認",
+      message: "地点が変更されました。<br>履歴がクリアされます。<br>キャンセルすると保存します。",
+      buttons: [
+        { text: "クリア", value: true },
+        { text: "キャンセル", value: false }
+      ],
+      callback: (result) => {
+        if (!result) {
+          uploadToDropbox();
+          return;
+        }
+        scannedData = [];
+        localStorage.setItem('history', JSON.stringify(scannedData));
+        updateHistory();
+        startApp();
+      }
+    });
+  } else {
+    startApp();
+  }
+}
+
+function startApp() {
+  staff = document.getElementById('staffName').value.trim();
+  const locationId = document.getElementById('location').value;
+  if (!staff || !locationId) {
+    alert("担当者名と地点を入力・選択してください");
+    return;
+  }
+  localStorage.setItem('staffName', staff);
+  selectedLocationId = locationId;
+  selectedLocationName = locations.find(loc => loc.id == locationId).name;
+
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = '';
+  document.getElementById('result').style.display = '';
+  document.getElementById('history').style.display = '';
+
+  startScanner();
+}
+
+function startScanner() {
+  const video = document.getElementById('video');
+  codeReader = new ZXing.BrowserQRCodeReader();
+
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+    if (result) {
+      const text = result.text.trim();
+      const parts = text.split('/');
+      if (parts.length >= 4) {
+        const [division, bibNumber, runnerName, gender] = parts;
+        currentScan = { division, bibNumber, runnerName, gender };
+        if (!scannedData.some(item => item.division === division && item.bibNumber === bibNumber)) {
+          const now = new Date();
+          const date = now.toLocaleDateString('ja-JP');
+          const time = now.toLocaleTimeString('ja-JP');
+          scannedData.push({
+            id: selectedLocationId,
+            name: selectedLocationName,
+            division,
+            bibNumber,
+            runnerName,
+            gender,
+            date,
+            time,
+            staff
+          });
+          localStorage.setItem('history', JSON.stringify(scannedData));
+          updateHistory();
+          showPopup(true);
+        } else {
+          showPopup(false);
+        }
+      }
+      codeReader.reset();
+    }
+  }, { video: { facingMode: "environment" } });
+}
+
+function showPopup(success) {
+  const overlay = document.getElementById('popup-overlay');
+  const title = document.getElementById('popup-title');
+  const info = document.getElementById('popup-info');
+  const popup = document.getElementById('popup');
+
+  title.textContent = success ? "チェックOK" : "読み取り済みです";
+  title.style.color = success ? "green" : "red";
+
+  info.innerHTML = `
+    地点：${selectedLocationName}<br>
+    部門：${currentScan.division}<br>
+    ゼッケン：${currentScan.bibNumber}<br>
+    氏名：${currentScan.runnerName}
+  `;
+
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
+
+  const okBtn = document.createElement('button');
+  okBtn.textContent = "OK";
+  okBtn.onclick = continueScan;
+  popup.appendChild(okBtn);
+
+  overlay.style.display = 'flex';
+}
+
+function continueScan() {
+  document.getElementById('popup-overlay').style.display = 'none';
+  startScanner();
+}
+
+function endApp() {
+  document.getElementById('popup-overlay').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+  document.getElementById('reader').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('history').style.display = 'none';
+}
+
+function updateHistory() {
+  const tbody = document.getElementById('historyTable');
+  tbody.innerHTML = '';
+  scannedData.forEach(data => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${data.id}</td><td>${data.name}</td><td>${data.division}</td><td>${data.bibNumber}</td><td>${data.runnerName}</td><td>${data.gender}</td><td>${data.date}</td><td>${data.time}</td><td>${data.staff}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// 保存ボタン用
+function downloadCSV() {
+  if (scannedData.length === 0) {
+    showCustomPopup({
+      title: "確認",
+      message: "保存するデータがありません",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+  let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
+  scannedData.forEach(data => {
+    csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
+  });
+  
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+ const blob = new Blob([bom, csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const timestamp = now.getFullYear().toString() + 
+                     (now.getMonth()+1).toString().padStart(2, '0') + 
+                     now.getDate().toString().padStart(2, '0') + "_" +
+                     now.getHours().toString().padStart(2, '0') + 
+                     now.getMinutes().toString().padStart(2, '0') + 
+                     now.getSeconds().toString().padStart(2, '0');
+
+  const safeLocation = selectedLocationName.replace(/\s+/g, '_');
+  const safeStaff = staff.replace(/\s+/g, '_');
+
+  a.href = url;
+  a.download = `${safeLocation}_${safeStaff}_${timestamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  scannedData = [];
+  updateHistory();
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+window.addEventListener('load', () => {
+  document.getElementById('zipCsvButton').addEventListener('click', async () => {
+    const input = document.getElementById('csvFileInput');
+    const files = input.files;
+    if (files.length === 0) {
+      showCustomPopup({
+      title: "確認",
+      message: "CSVファイルを選択してください。",
+      buttons: [{ text: "OK", value: true }]
+    });
+      return;
+    }
+
+    const zip = new JSZip();
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const content = await file.arrayBuffer();
+      zip.file(file.name, content);
+    }
+
+    let staffName = document.getElementById('staffName')?.value.trim();
+    if (!staffName) {
+      staffName = '未登録';
+    }
+    staffName = staffName.replace(/\s+/g, '_');
+
+    const now = new Date();
+    const dateStr = now.getFullYear().toString() +
+                    (now.getMonth()+1).toString().padStart(2, '0') +
+                    now.getDate().toString().padStart(2, '0');
+    const timeStr = now.getHours().toString().padStart(2, '0') +
+                    now.getMinutes().toString().padStart(2, '0') +
+                    now.getSeconds().toString().padStart(2, '0');
+
+    const filename = `${staffName}_${dateStr}_${timeStr}.zip`;
+    const blob = await zip.generateAsync({ type: "blob" });
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    input.value = '';
+  });
+
+  document.getElementById('mailButton').addEventListener('click', () => {
+    const subject = encodeURIComponent("QRデータ送信");
+    const mailtoLink = `mailto:273keisoku@gmail.com?subject=${subject}`;
+    window.location.href = mailtoLink;
+  });
+});
+</script>
+<script>
+function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
+  const overlay = document.getElementById('popup-overlay');
+  const popup = document.getElementById('popup');
+  const titleElem = document.getElementById('popup-title');
+  const infoElem = document.getElementById('popup-info');
+
+  titleElem.textContent = title;
+  titleElem.style.color = "";
+  infoElem.innerHTML = message;
+
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
+
+  buttons.forEach(({ text, value }) => {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.onclick = () => {
+      overlay.style.display = 'none';
+      if (callback) callback(value);
+    };
+    popup.appendChild(btn);
+  });
+
+  overlay.style.display = 'flex';
+}
+</script>
+<script>
+// アップロード処理
+// const DROPBOX_ACCESS_TOKEN = "sl.u.AFuLJQPJ13nPLSSik2XRRGLu0HkIC_GVlUIzHrl2T4maGHvU5Q5EBRl3w-b4idyjknIZedYAhmos8uCtrgd_KxPCAOVvOWQzLQ29b_WLDkpAx480DtxHfR39eYHPXmnALzJoNT0_Iua93PK1DPbjFJBEuSG0_VE4SHxYV0WOPOBACYTvTAWaSCVl6a8oT1yoOtUm-unkfaxjGHBtdn3yQzfu5W0MM4esfMRAc0Zcc1hJJd3plhMO959YM4VhN4Z01YQD0ZOwhNOqI3KJD3juB_IvMaw31-38ej3jtPzgv3kA3R7itRgqXnmQqZZu6Ld4ueZEBVcAnG_Qv9Y_6GSTOBKKDUFvtOnv4uXVawbsOtKTrt38GpT-SZ8eAVU_UjGSl7BjZYUYWLyJrlvW68FgQIuJr98ezZp53sXZ2b3LoTy7bKHRDsAgC7PPZ-w5C7EHLiwz1iskRKhlsXwRPlEG2XcqlfzH92mudTgmElgNFisF5sWgn-txIDW0O5YqmTreuPu0RL6xfeHl0qSvBz-4_2ZPbcSX7v3_MR9CJVJ40u2In76-J-crBiXr7EacBAzSCb5c8CLsIYk8hlU4rlCX8eer4D7BRtP2ccRn_mFav62hCpj2JuPqJGrOx2GiCEePq3wneSPq3mvNKaSdDaIpSPp4y-XherwQe3Q8Ht9lXnUkiVl5kNfrjEVC7Voqc-TVsfuap_IPtpnI-EKu4EriTy9CAzcJqIh4FWqN_UrsOp6kHRwLq4NArM2pUJpU6x-jnoEzNA3ex84UU8eXjG8D-4Bp1cYcEVZqFrmETTLJngiemhpm1ro-vojpYDMuPEc2OcjOvW2-t8kz2-RVe3FUvkTuVDinlUcmOCyFTRfxYHunfVfunUlrL8w4zrzlLD5a9KEKM78CC_7U5U1T-gayaPQLL-DhBeLQBkC-WyQNjI8J-mTdAHMyvHQ4WCBngu4N7Ro1bznjdWEFdQ8wgKnZLX5Gq2Gs4gUj6mWn1zecojjNMeg75IzU9DieSkxU92S3yWsJgQ0WcbQ2HbnKJ9VVrwjh1EVPGUiBwDXeOVKk7_5xXZbxwVYhlQCxZoS83b2Jdl4MzeyF2A1AeIuZzTtabFfZarEfCo5Rw1mwkoVHmU0sZpD0oKaNERU6Dtq1Fh-zAHf0DRj-XX0G5KPFUcBvVOrzPl3clfjgverJmoryW760H7OAO-r48s53JpapbUWPgXLra3YdT0gyKFqzPT9IjzO5MTLXtIcVm7BUZSrXNGMIDaUcITQgi5p-KB9NYrEiAliRSai9rHEUT0osmTu-HV0_ZXnSk8z4YQ12t0_MA6BPGg";
+
+
+function uploadToDropbox() {
+  if (!scannedData || scannedData.length === 0) {
+    alert("アップロードするデータがありません。");
+    return;
+  }
+
+  const csv = generateCSV();
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+  const formData = new FormData();
+  formData.append("file", blob, "upload.csv");
+
+  fetch("/.netlify/functions/upload", {
+    method: "POST",
+    body: formData
+  }).then(res => res.json()).then(data => {
+    if (data.success) {
+      alert("Dropboxにアップロードしました。");
+    } else {
+      alert("アップロードに失敗しました: " + data.error);
+    }
+  }).catch(err => {
+    alert("通信エラー: " + err.message);
+  });
+}
+  if (!scannedData || scannedData.length === 0) {
+    alert("アップロードするデータがありません。");
+    return;
+  }
+  const csv = generateCSV();
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+  fetch("https://content.dropboxapi.com/2/files/upload", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + DROPBOX_ACCESS_TOKEN,
+      "Dropbox-API-Arg": JSON.stringify({
+        path: "/QRデータ/" + new Date().toISOString().replace(/[:.]/g, "_") + ".csv",
+        mode: "add",
+        autorename: true,
+        mute: false
+      }),
+      "Content-Type": "application/octet-stream"
+    },
+    body: blob
+  })
+  .then(res => {
+    if (res.ok) {
+      alert("Dropboxにアップロードしました。");
+    } else {
+      alert("アップロードに失敗しました。");
+    }
+  });
+}
+
+// データ確認処理
+function checkUploadedData() {
+  const staffName = localStorage.getItem('staffName');
+  if (!staffName) {
+    alert("担当者名が設定されていません。");
+    return;
+  }
+
+  fetch("/.netlify/functions/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staffName })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const csvTexts = data.files;
+    let recordMap = new Map();
+    csvTexts.forEach(text => {
+      const rows = text.trim().split("\n").slice(1);
+      rows.forEach(row => {
+        const cols = row.split(",");
+        const key = `${cols[0]}_${cols[2]}`;
+        const datetime = `${cols[5]} ${cols[6]}`;
+        if (!recordMap.has(key) || datetime < recordMap.get(key).datetime) {
+          recordMap.set(key, { row: cols, datetime });
+        }
+      });
+    });
+
+    const combined = [...recordMap.values()].map(v => v.row);
+    combined.sort((a, b) => {
+      if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
+      return `${a[5]} ${a[6]}`.localeCompare(`${b[5]} ${b[6]}`);
+    });
+
+    const table = document.createElement("table");
+    table.border = "1";
+    const header = ["地点", "部門", "ゼッケン番号", "氏名", "性別", "日付", "時刻", "担当者"];
+    const thead = table.insertRow();
+    header.forEach(h => thead.insertCell().textContent = h);
+    combined.forEach(row => {
+      const tr = table.insertRow();
+      row.forEach(col => tr.insertCell().textContent = col);
+    });
+
+    let result = document.getElementById("result");
+    if (!result) {
+      result = document.createElement("div");
+      result.id = "result";
+      document.body.appendChild(result);
+    }
+    result.innerHTML = "";
+    result.appendChild(table);
+    result.style.display = "";
+  })
+  .catch(err => {
+    alert("データの取得に失敗しました");
+    console.error(err);
+  });
+}
+  const staffName = localStorage.getItem('staffName');
+  if (!staffName) {
+    alert("担当者名が設定されていません。");
+    return;
+  }
+
+  fetch("https://api.dropboxapi.com/2/files/list_folder", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + DROPBOX_ACCESS_TOKEN,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ path: "/QRデータ" })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const files = data.entries.filter(file => file.name.includes(staffName) && file.name.endsWith(".csv"));
+    return Promise.all(files.map(file => 
+      fetch("https://content.dropboxapi.com/2/files/download", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + DROPBOX_ACCESS_TOKEN,
+          "Dropbox-API-Arg": JSON.stringify({ path: file.path_lower })
+        }
+      }).then(res => res.text())
+    ));
+  })
+  .then(csvTexts => {
+    let recordMap = new Map();
+    csvTexts.forEach(text => {
+      const rows = text.trim().split("\n").slice(1);
+      rows.forEach(row => {
+        const cols = row.split(",");
+        const key = `${cols[0]}_${cols[2]}`;
+        const datetime = `${cols[5]} ${cols[6]}`;
+        if (!recordMap.has(key) || datetime < recordMap.get(key).datetime) {
+          recordMap.set(key, { row: cols, datetime });
+        }
+      });
+    });
+
+    const combined = [...recordMap.values()].map(v => v.row);
+    combined.sort((a, b) => {
+      if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
+      return `${a[5]} ${a[6]}`.localeCompare(`${b[5]} ${b[6]}`);
+    });
+
+    const table = document.createElement("table");
+    table.border = "1";
+    const header = ["地点", "部門", "ゼッケン番号", "氏名", "性別", "日付", "時刻", "担当者"];
+    const thead = table.insertRow();
+    header.forEach(h => thead.insertCell().textContent = h);
+    combined.forEach(row => {
+      const tr = table.insertRow();
+      row.forEach(col => tr.insertCell().textContent = col);
+    });
+
+    let result = document.getElementById("result");
+    if (!result) {
+      result = document.createElement("div");
+      result.id = "result";
+      document.body.appendChild(result);
+    }
+    result.innerHTML = "";
+    result.appendChild(table);
+    result.style.display = "";
+  })
+  .catch(err => {
+    alert("データの取得に失敗しました");
+    console.error(err);
+  });
+}
+
+function generateCSV() {
+  let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
+  scannedData.forEach(data => {
+    csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
+  });
+  return csv;
+}
+
+</script>
+</body>
+</html>
