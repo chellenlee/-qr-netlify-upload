@@ -39,14 +39,18 @@ exports.handler = async (event) => {
 
     for (let part of parts) {
       if (part.includes('Content-Disposition') && part.includes('filename=')) {
-        const [, headers, content] = part.split(/\r\n\r\n/);
-        const nameMatch = headers.match(/name="(.+?)"/);
+        const splitIndex = part.indexOf("\r\n\r\n".replace(/\r\n/g, '
+'));
+        if (splitIndex === -1) continue;
+
+        const headers = part.substring(0, splitIndex);
+        const content = part.substring(splitIndex + 4);
+
         const filenameMatch = headers.match(/filename="(.+?)"/);
         if (!filenameMatch) continue;
 
         const fileName = filenameMatch[1].trim();
-        const fileContent = content.trimEnd();  // drop final 
--- if present
+        const fileContent = content.trimEnd();
 
         const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
         const result = await dbx.filesUpload({
