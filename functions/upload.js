@@ -39,23 +39,24 @@ exports.handler = async (event) => {
 
     for (let part of parts) {
       if (part.includes('Content-Disposition') && part.includes('filename=')) {
-        const splitIndex = part.indexOf("\r\n\r\n".replace(/\r\n/g, '
-'));
-        if (splitIndex === -1) continue;
+        const headerEnd = part.indexOf("
 
-        const headers = part.substring(0, splitIndex);
-        const content = part.substring(splitIndex + 4);
+");
+        if (headerEnd === -1) continue;
+
+        const headers = part.slice(0, headerEnd);
+        const content = part.slice(headerEnd + 4).replace(/
+--$/, '').trimEnd();
 
         const filenameMatch = headers.match(/filename="(.+?)"/);
         if (!filenameMatch) continue;
 
-        const fileName = filenameMatch[1].trim();
-        const fileContent = content.trimEnd();
-
+        const fileName = filenameMatch[1];
         const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
+
         const result = await dbx.filesUpload({
           path: `/QRデータ/${fileName}`,
-          contents: Buffer.from(fileContent, 'utf8'),
+          contents: Buffer.from(content, 'utf8'),
           mode: 'add',
           autorename: true,
           mute: false
