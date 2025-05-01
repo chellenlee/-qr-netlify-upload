@@ -39,15 +39,12 @@ exports.handler = async (event) => {
 
     for (let part of parts) {
       if (part.includes('Content-Disposition') && part.includes('filename=')) {
-        const headerEnd = part.indexOf("
-
-");
+       const headerEnd = part.indexOf("\r\n\r\n");
         if (headerEnd === -1) continue;
 
         const headers = part.slice(0, headerEnd);
-        const content = part.slice(headerEnd + 4).replace(/
---$/, '').trimEnd();
-
+        const content = part.slice(headerEnd + 4).replace(/\r\n--$/, '').trimEnd();
+        
         const filenameMatch = headers.match(/filename="(.+?)"/);
         if (!filenameMatch) continue;
 
