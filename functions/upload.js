@@ -39,9 +39,8 @@ exports.handler = async (event) => {
 
     for (let part of parts) {
       if (part.includes('Content-Disposition') && part.includes('filename=')) {
-        const headerEnd = part.indexOf("
-
-");
+        const headerEnd = part.indexOf("\r\n\r\n".replace(/\r\n/g, '
+'));
         if (headerEnd === -1) continue;
 
         const headers = part.slice(0, headerEnd);
