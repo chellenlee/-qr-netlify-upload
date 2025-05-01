@@ -1,46 +1,37 @@
-const fetch = require('node-fetch');
+const { Dropbox } = require('dropbox');
 
 exports.handler = async (event) => {
-  const token = process.env.DROPBOX_TOKEN;
-  const { staffName } = JSON.parse(event.body);
-
-  if (!staffName) {
-    return { statusCode: 400, body: "Missing staffName" };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
-  try {
-    const listRes = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ path: "/QRデータ" })
-    });
+  const { staffName } = JSON.parse(event.body || "{}");
+  if (!staffName) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing staffName' }) };
+  }
 
-    const listData = await listRes.json();
-    const csvFiles = listData.entries.filter(
-      file => file.name.includes(staffName) && file.name.endswith(".csv")
+  const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN });
+
+  try {
+    const folderRes = await dbx.filesListFolder({ path: "/QRデータ" });
+    const files = folderRes.entries.filter(file =>
+      file.name.includes(staffName) && file.name.endsWith(".csv")
     );
 
-    const csvContents = await Promise.all(csvFiles.map(file => 
-      fetch("https://content.dropboxapi.com/2/files/download", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Dropbox-API-Arg": JSON.stringify({ path: file.path_lower })
-        }
-      }).then(res => res.text())
+    const fileContents = await Promise.all(files.map(file =>
+      dbx.filesDownload({ path: file.path_lower }).then(res =>
+        res.result.fileBinary.toString("utf8")
+      )
     ));
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ data: csvContents })
+      body: JSON.stringify({ files: fileContents })
     };
   } catch (err) {
     return {
       statusCode: 500,
-      body: `Error retrieving data: ${err.message}`
+      body: JSON.stringify({ error: err.message })
     };
   }
 };

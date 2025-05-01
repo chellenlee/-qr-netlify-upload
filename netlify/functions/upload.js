@@ -1,35 +1,33 @@
-const fetch = require('node-fetch');
+const { Dropbox } = require('dropbox');
+const multiparty = require('multiparty');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
-  const { filename, content } = JSON.parse(event.body);
-  const token = process.env.DROPBOX_TOKEN;
+  const form = new multiparty.Form();
+  return new Promise((resolve, reject) => {
+    form.parse({ headers: event.headers, body: Buffer.from(event.body, 'base64') }, async (err, fields, files) => {
+      if (err) {
+        return resolve({ statusCode: 500, body: JSON.stringify({ error: 'Form parsing failed' }) });
+      }
 
-  const csvWithBOM = '\uFEFF' + content;
-  const buffer = Buffer.from(csvWithBOM, 'utf8');
+      const file = files.file[0];
+      const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN });
 
-  try {
-    const response = await fetch("https://content.dropboxapi.com/2/files/upload", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/octet-stream",
-        "Dropbox-API-Arg": JSON.stringify({
-          path: `/QRデータ/${filename}`,
-          mode: "add",
+      try {
+        const result = await dbx.filesUpload({
+          path: `/QRデータ/${file.originalFilename}`,
+          contents: require('fs').readFileSync(file.path),
+          mode: 'add',
           autorename: true,
           mute: false
-        })
-      },
-      body: buffer
+        });
+        resolve({ statusCode: 200, body: JSON.stringify({ success: true, path: result.path_display }) });
+      } catch (error) {
+        resolve({ statusCode: 500, body: JSON.stringify({ success: false, error: error.message }) });
+      }
     });
-
-    if (!response.ok) throw new Error(await response.text());
-    return { statusCode: 200, body: "Upload successful" };
-  } catch (err) {
-    return { statusCode: 500, body: `Upload failed: ${err.message}` };
-  }
+  });
 };
