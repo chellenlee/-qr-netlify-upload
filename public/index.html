@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QRアップロードアプリ</title>
+</head>
+<body>
+  <h1>QRデータアップロード</h1>
+  <input type="text" id="staffName" placeholder="担当者名" />
+  <button onclick="uploadToDropbox()">アップロード</button>
+  <button onclick="checkUploadedData()">データ確認</button>
+  <div id="result"></div>
+
+  <script>
+    let scannedData = [
+      { id: 1, name: "受付", division: "A", bibNumber: "101", runnerName: "田中", gender: "男", date: "2025/05/01", time: "12:00:00", staff: "山田" },
+      { id: 2, name: "スタート", division: "A", bibNumber: "102", runnerName: "佐藤", gender: "女", date: "2025/05/01", time: "12:05:00", staff: "山田" }
+    ];
+
+    function generateCSV() {
+      let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
+      scannedData.forEach(data => {
+        csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
+      });
+      return csv;
+    }
+
+    function uploadToDropbox() {
+      const csv = generateCSV();
+      const now = new Date();
+      const filename = `${now.toISOString().replace(/[:.]/g, "_")}.csv`;
+
+      fetch("/.netlify/functions/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: csv, filename })
+      })
+      .then(res => res.ok ? alert("アップロード完了") : res.text().then(t => alert("失敗: " + t)))
+      .catch(err => alert("通信エラー: " + err.message));
+    }
+
+    function checkUploadedData() {
+      const staffName = document.getElementById('staffName').value.trim();
+      if (!staffName) {
+        alert("担当者名を入力してください");
+        return;
+      }
+
+      fetch("/.netlify/functions/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffName })
+      })
+      .then(res => res.json())
+      .then(json => {
+        const allCsv = json.data.join("\n").split("\n").filter(l => l.trim());
+        const rows = allCsv.slice(1).map(row => row.split(","));
+        const uniqueMap = new Map();
+
+        rows.forEach(cols => {
+          const key = `${cols[0]}_${cols[2]}`;
+          const datetime = `${cols[6]} ${cols[7]}`;
+          if (!uniqueMap.has(key) || datetime < uniqueMap.get(key).datetime) {
+            uniqueMap.set(key, { row: cols, datetime });
+          }
+        });
+
+        const finalRows = [...uniqueMap.values()].map(v => v.row);
+        finalRows.sort((a, b) => {
+          if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
+          return `${a[6]} ${a[7]}`.localeCompare(`${b[6]} ${b[7]}`);
+        });
+
+        const table = document.createElement("table");
+        const header = ["地点", "部門", "ゼッケン", "氏名", "性別", "日付", "時刻", "担当者"];
+        const thead = table.insertRow();
+        header.forEach(h => thead.insertCell().textContent = h);
+        finalRows.forEach(cols => {
+          const tr = table.insertRow();
+          cols.forEach(col => tr.insertCell().textContent = col);
+        });
+
+        const result = document.getElementById("result");
+        result.innerHTML = "";
+        result.appendChild(table);
+      })
+      .catch(err => alert("確認エラー: " + err.message));
+    }
+  </script>
+</body>
+</html>
