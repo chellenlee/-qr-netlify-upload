@@ -444,6 +444,8 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
 
 
 function uploadToDropbox() {
+  alert("アップロード処理を開始します");  // ← デバッグ用表示
+
   if (!scannedData || scannedData.length === 0) {
     alert("アップロードするデータがありません。");
     return;
