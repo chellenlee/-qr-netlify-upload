@@ -1,10 +1,30 @@
 const { Dropbox } = require('dropbox');
+const fetch = require('node-fetch');
 const multiparty = require('multiparty');
-const fetch = require('node-fetch');  // fetch追加
 const fs = require('fs');
 
 exports.handler = async (event) => {
-  console.log("Received event:", event.httpMethod, event.headers);
+  console.log("HTTP Method:", event.httpMethod);
+
+  if (event.httpMethod === 'GET') {
+    const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
+    try {
+      const info = await dbx.usersGetCurrentAccount();
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: "valid",
+          account: info.result.name.display_name,
+          email: info.result.email
+        })
+      };
+    } catch (err) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ status: "invalid", error: err.message })
+      };
+    }
+  }
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -20,10 +40,7 @@ exports.handler = async (event) => {
 
       try {
         const file = files.file[0];
-        console.log("Received file:", file.originalFilename);
-
         const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
-        console.log("Using Dropbox token:", process.env.DROPBOX_TOKEN ? "SET" : "NOT SET");
 
         const result = await dbx.filesUpload({
           path: `/QRデータ/${file.originalFilename}`,
