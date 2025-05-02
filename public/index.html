@@ -242,9 +242,11 @@ if (!staff || !locationId) {
 function startScanner() {
   const video = document.getElementById('video');
   codeReader = new ZXing.BrowserQRCodeReader();
+  console.log("startScanner: カメラ初期化開始");
 
   codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
     if (result) {
+      console.log("QRコード読み取り成功:", result.text);
       const text = result.text.trim();
       const parts = text.split('/');
       if (parts.length >= 4) {
@@ -273,6 +275,8 @@ function startScanner() {
         }
       }
       codeReader.reset();
+    } else if (err) {
+      console.error("QRコード読み取りエラー:", err);
     }
   }, { video: { facingMode: "environment" } });
 }
