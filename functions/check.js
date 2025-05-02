@@ -1,49 +1,39 @@
-const { Dropbox } = require("dropbox");
+const { Dropbox } = require('dropbox');
+const fetch = require('node-fetch');
 
 exports.handler = async function(event, context) {
-  console.log("=== check.js invoked ===");
+  console.log('=== check.js invoked ===');
 
-  const staffName = event.queryStringParameters?.staff;
-  if (!staffName) {
-    console.log("No staffName in query");
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "No staffName" })
-    };
-  }
+  const staffName = event.queryStringParameters?.staffName || '';
+  console.log('Received staffName:', staffName);
 
-  console.log("Received staffName:", staffName);
+  const DROPBOX_TOKEN = process.env.DROPBOX_ACCESS_TOKEN;
 
-  const accessToken = process.env.DROPBOX_ACCESS_TOKEN;
-  if (!accessToken) {
-    console.log("Missing Dropbox token");
+  if (!DROPBOX_TOKEN) {
+    console.error('Missing DROPBOX_ACCESS_TOKEN');
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Missing Dropbox token" })
+      body: JSON.stringify({ error: 'Missing Dropbox token' }),
     };
   }
 
-  const dbx = new Dropbox({ accessToken });
+  const dbx = new Dropbox({ accessToken: DROPBOX_TOKEN, fetch });
 
   try {
-    const response = await dbx.filesListFolder({ path: "/QRデータ" });
-    console.log("Dropbox API responded with", response.result.entries.length, "entries");
-
-    const matched = response.result.entries.filter(
-      file => file.name.startsWith(staffName + "_") && file.name.endsWith(".csv")
-    );
-
-    console.log("Matched", matched.length, "files");
+    const list = await dbx.filesListFolder({ path: '' });
+    const files = list.result.entries
+      .filter(f => f.name.endsWith('.csv') && f.name.startsWith(staffName))
+      .map(f => f.name);
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ entries: matched })
+      body: JSON.stringify({ files }),
     };
-  } catch (err) {
-    console.error("Dropbox API error:", err);
+  } catch (error) {
+    console.error('Error listing Dropbox folder:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Dropbox API error", details: err.message })
+      body: JSON.stringify({ error: 'Failed to list Dropbox folder' }),
     };
   }
 };
