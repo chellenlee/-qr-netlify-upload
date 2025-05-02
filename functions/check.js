@@ -1,67 +1,89 @@
-const fetch = require("node-fetch");
-const { Dropbox } = require("dropbox");
+const { Dropbox } = require('dropbox');
+const fetch = require('node-fetch');
 
-async function getAccessToken() {
-  const res = await fetch("https://api.dropboxapi.com/oauth2/token", {
-    method: "POST",
-    headers: {
-      "Authorization": "Basic " + Buffer.from(
-        process.env.DROPBOX_APP_KEY + ":" + process.env.DROPBOX_APP_SECRET
-      ).toString("base64"),
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: process.env.DROPBOX_REFRESH_TOKEN
-    })
-  });
-  const json = await res.json();
-  return json.access_token;
-}
-
-exports.handler = async (event) => {
+exports.handler = async function(event) {
   console.log("=== check.js invoked ===");
 
-  try {
-    const body = JSON.parse(event.body || '{}');
-    const staffName = body.staffName;
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
 
-    if (!staffName || typeof staffName !== 'string') {
-      throw new Error("Invalid or missing staffName.");
+  let staffName;
+  try {
+    const body = JSON.parse(event.body);
+    staffName = (body.staffName || "").trim();
+    if (!staffName) {
+      return { statusCode: 400, body: "Missing staffName" };
     }
     console.log("Received staffName:", staffName);
+  } catch (err) {
+    return { statusCode: 400, body: "Invalid JSON in request body" };
+  }
 
-    const token = await getAccessToken();
-    const dbx = new Dropbox({ accessToken: token, fetch });
+  const ACCESS_TOKEN = process.env.DROPBOX_ACCESS_TOKEN;
+  const dbx = new Dropbox({ accessToken: ACCESS_TOKEN, fetch });
 
-    const folderRes = await dbx.filesListFolder({ path: '/QRデータ' });
-    const files = folderRes.result.entries.filter(file =>
-      file.name.includes(staffName) && file.name.endsWith('.csv')
+  try {
+    const listRes = await dbx.filesListFolder({ path: "" });
+    const files = listRes.result.entries.filter(
+      (f) => f.name.endsWith(".csv") && f.name.includes(staffName)
     );
 
-    if (files.length === 0) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ files: [], message: "一致するCSVファイルが見つかりませんでした。" })
-      };
+    let rows = [];
+
+    for (const file of files) {
+      const downloadRes = await dbx.filesDownload({ path: file.path_lower });
+      const content = downloadRes.result.fileBinary.toString("utf8");
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
+
+      for (const line of lines) {
+        const parts = line.split(",").map(s => s.trim());
+        if (parts.length === 7) {
+          rows.push(parts);
+        }
+      }
     }
 
-    const fileContents = await Promise.all(
-      files.map(async file => {
-        const res = await dbx.filesDownload({ path: file.path_lower });
-        return res.result.fileBinary.toString('utf8');
-      })
-    );
+    // 重複排除（地点ID + ゼッケン番号）
+    const seen = new Set();
+    const deduped = [];
+
+    for (const row of rows) {
+      const key = row[0] + "_" + row[2]; // 地点 + ゼッケン
+      const timestamp = row[4] + " " + row[5];
+      row._timestamp = timestamp;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(row);
+      } else {
+        // すでに追加済み：比較して早いものだけ残す
+        const existing = deduped.find(r => r[0] === row[0] && r[2] === row[2]);
+        if (existing && row._timestamp < existing._timestamp) {
+          Object.assign(existing, row);
+        }
+      }
+    }
+
+    // ソート（地点ID, 時刻）
+    deduped.sort((a, b) => {
+      if (a[0] !== b[0]) return a[0].localeCompare(b[0], "ja");
+      return a._timestamp.localeCompare(b._timestamp);
+    });
+
+    // _timestamp 削除して返す
+    for (const r of deduped) delete r._timestamp;
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ files: fileContents })
+      body: JSON.stringify({ data: deduped }, null, 2)
     };
+
   } catch (err) {
-    console.error("check.js error:", err);
+    console.error("Dropbox API error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message })
+      body: JSON.stringify({ error: "Dropbox API error", details: err.message })
     };
   }
 };
