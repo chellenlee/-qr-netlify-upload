@@ -107,10 +107,9 @@
 <option value="">地点を選択</option>
 </select>
 <br/>
-<button class="start-button" onclick="confirmChange()">開始/変更</button>
+<button class="start-button" onclick="confirmChange()">開始/変更</button><button class="start-button" id="checkDataButton" style="margin-top: 12px; margin-left: 0px; display: block;">データ確認</button>
 <!-- 保存ボタンを追加 -->
-<button class="save-button" onclick="uploadToDropbox()">アップロード</button><button class="check-button" onclick="checkUploadedData()">データ確認</button>
-
+<button class="save-button" onclick="uploadToDropbox()">アップロード</button>
 </div>
 <div id="reader" style="display:none;">
 <h3 id="message">読み取り中...</h3>
@@ -361,60 +360,6 @@ function downloadCSV() {
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-window.addEventListener('load', () => {
-  document.getElementById('zipCsvButton').addEventListener('click', async () => {
-    const input = document.getElementById('csvFileInput');
-    const files = input.files;
-    if (files.length === 0) {
-      showCustomPopup({
-      title: "確認",
-      message: "CSVファイルを選択してください。",
-      buttons: [{ text: "OK", value: true }]
-    });
-      return;
-    }
-
-    const zip = new JSZip();
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const content = await file.arrayBuffer();
-      zip.file(file.name, content);
-    }
-
-    let staffName = document.getElementById('staffName')?.value.trim();
-    if (!staffName) {
-      staffName = '未登録';
-    }
-    staffName = staffName.replace(/\s+/g, '_');
-
-    const now = new Date();
-    const dateStr = now.getFullYear().toString() +
-                    (now.getMonth()+1).toString().padStart(2, '0') +
-                    now.getDate().toString().padStart(2, '0');
-    const timeStr = now.getHours().toString().padStart(2, '0') +
-                    now.getMinutes().toString().padStart(2, '0') +
-                    now.getSeconds().toString().padStart(2, '0');
-
-    const filename = `${staffName}_${dateStr}_${timeStr}.zip`;
-    const blob = await zip.generateAsync({ type: "blob" });
-
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    input.value = '';
-  });
-
-  document.getElementById('mailButton').addEventListener('click', () => {
-    const subject = encodeURIComponent("QRデータ送信");
-    const mailtoLink = `mailto:273keisoku@gmail.com?subject=${subject}`;
-    window.location.href = mailtoLink;
-  });
-});
-</script>
-<script>
 function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
   const overlay = document.getElementById('popup-overlay');
   const popup = document.getElementById('popup');
@@ -560,5 +505,101 @@ function generateCSV() {
   window.uploadToDropbox = uploadToDropbox;
   window.checkUploadedData = checkUploadedData;
 </script>
-</body>
+<script>
+document.querySelectorAll("button").forEach(btn => {
+  if (btn.textContent.includes("アップロード")) {
+    btn.addEventListener("click", async () => {
+      const fileInput = document.querySelector('input[type="file"]');
+      const file = fileInput?.files?.[0];
+      if (!file) return alert("CSVファイルを選択してください");
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const binary = new Uint8Array(reader.result);
+        const base64 = btoa(String.fromCharCode(...binary));
+        const staff = document.getElementById("name")?.value || "unknown";
+        const body = {
+          filename: file.name,
+          staff: staff,
+          content: base64
+        };
+        try {
+          const res = await fetch("/.netlify/functions/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          alert(data.status === "success" ? "アップロード成功: " + data.path : "失敗: " + data.error);
+        } catch (e) {
+          alert("通信エラー: " + e.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+});
+</script><script>
+document.getElementById("checkDataButton").addEventListener("click", async () => {
+  const staffName = document.getElementById("name")?.value?.trim();
+  if (!staffName) return alert("担当者名が未入力です");
+
+  try {
+    const res = await fetch("/.netlify/functions/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ staffName })
+    });
+    const json = await res.json();
+    const data = json.data || [];
+
+    const container = document.getElementById("checkResult") || (() => {
+      const d = document.createElement("div");
+      d.id = "checkResult";
+      d.style.marginTop = "24px";
+      document.body.appendChild(d);
+      return d;
+    })();
+
+    if (data.length === 0) {
+      container.innerHTML = "<p>該当する記録はありません。</p>";
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.style.borderCollapse = "collapse";
+    table.style.marginTop = "12px";
+    table.style.width = "100%";
+
+    const header = document.createElement("tr");
+    ["地点", "部門", "ゼッケン", "氏名", "日付", "時刻", "担当者"].forEach(h => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      th.style.border = "1px solid #ccc";
+      th.style.padding = "4px";
+      th.style.background = "#eee";
+      header.appendChild(th);
+    });
+    table.appendChild(header);
+
+    data.forEach(row => {
+      const tr = document.createElement("tr");
+      row.forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell;
+        td.style.border = "1px solid #ccc";
+        td.style.padding = "4px";
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+
+    container.innerHTML = "";
+    container.appendChild(table);
+  } catch (err) {
+    alert("データ確認エラー：" + err.message);
+  }
+});
+</script></body>
 </html>
+
