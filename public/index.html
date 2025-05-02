@@ -2,14 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>CSVアップロード</title>
+  <title>CSVアップロード＋確認</title>
 </head>
 <body>
-  <h1>CSVアップロード</h1>
+  <h1>CSVアップロードと確認</h1>
+
   <input type="file" id="fileInput" />
   <input type="text" id="staffInput" placeholder="担当者名を入力" />
   <button onclick="uploadFile()">アップロード</button>
+  <hr />
+  <button onclick="checkUploadedData()">データ確認</button>
   <div id="status"></div>
+  <ul id="fileList"></ul>
 
   <script>
     async function uploadFile() {
@@ -17,12 +21,8 @@
       const staffInput = document.getElementById("staffInput");
       const statusDiv = document.getElementById("status");
 
-      if (!fileInput.files.length) {
-        statusDiv.innerText = "ファイルを選択してください。";
-        return;
-      }
-      if (!staffInput.value.trim()) {
-        statusDiv.innerText = "担当者名を入力してください。";
+      if (!fileInput.files.length || !staffInput.value.trim()) {
+        statusDiv.innerText = "ファイルと担当者名を入力してください。";
         return;
       }
 
@@ -30,7 +30,7 @@
       const reader = new FileReader();
 
       reader.onload = async function () {
-        const base64 = reader.result.split(",")[1]; // データ部分のみ抽出
+        const base64 = reader.result.split(",")[1];
 
         const payload = {
           filename: file.name,
@@ -41,24 +41,45 @@
         try {
           const response = await fetch("/.netlify/functions/upload", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
           });
 
           const result = await response.json();
-          if (response.ok) {
-            statusDiv.innerText = "アップロード成功：" + result.path;
-          } else {
-            statusDiv.innerText = "アップロード失敗：" + result.error;
-          }
+          statusDiv.innerText = response.ok
+            ? "アップロード成功：" + result.path
+            : "アップロード失敗：" + result.error;
         } catch (err) {
           statusDiv.innerText = "エラー：" + err.message;
         }
       };
 
-      reader.readAsDataURL(file); // Base64化
+      reader.readAsDataURL(file);
+    }
+
+    async function checkUploadedData() {
+      const statusDiv = document.getElementById("status");
+      const fileList = document.getElementById("fileList");
+      fileList.innerHTML = "";
+      statusDiv.innerText = "確認中...";
+
+      try {
+        const response = await fetch("/.netlify/functions/check");
+        const result = await response.json();
+
+        if (response.ok && result.entries) {
+          statusDiv.innerText = "取得成功：" + result.entries.length + "件";
+          result.entries.forEach(entry => {
+            const li = document.createElement("li");
+            li.textContent = entry.name + "（" + entry.client_modified + "）";
+            fileList.appendChild(li);
+          });
+        } else {
+          statusDiv.innerText = "取得失敗：" + result.error;
+        }
+      } catch (err) {
+        statusDiv.innerText = "通信エラー：" + err.message;
+      }
     }
   </script>
 </body>
