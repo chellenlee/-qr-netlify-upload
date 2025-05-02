@@ -319,15 +319,6 @@ function updateHistory() {
 }
 
 // 保存ボタン用
-function downloadCSV() {
-  if (scannedData.length === 0) {
-    showCustomPopup({
-      title: "確認",
-      message: "保存するデータがありません",
-      buttons: [{ text: "OK", value: true }]
-    });
-    return;
-  }
   let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
   scannedData.forEach(data => {
     csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
@@ -391,6 +382,11 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
 
 
 function uploadToDropbox() {
+  showCustomPopup({
+    title: "アップロード開始",
+    message: "キャッシュからCSVを生成し、Dropboxへ送信しています。",
+    buttons: [{ text: "OK" }]
+  });
   alert("アップロード処理を開始します");  // ← デバッグ用表示
 
   if (!scannedData || scannedData.length === 0) {
@@ -432,12 +428,6 @@ function uploadToDropbox() {
 }
 
 // データ確認処理
-function checkUploadedData() {
-  const staffName = localStorage.getItem('staffName');
-  if (!staffName) {
-    alert("担当者名が設定されていません。");
-    return;
-  }
 
   fetch("/.netlify/functions/check", {
     method: "POST",
@@ -493,78 +483,15 @@ function checkUploadedData() {
   });
 }
 
-function generateCSV() {
-  let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
-  scannedData.forEach(data => {
-    csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
-  });
-  return csv;
-}
 </script>
 <script>
   window.uploadToDropbox = uploadToDropbox;
-  window.checkUploadedData = checkUploadedData;
-</script>
-<script>
-document.querySelectorAll("button").forEach(btn => {
-  if (btn.textContent.includes("アップロード")) {
-    btn.addEventListener("click", async () => {
-      const fileInput = document.querySelector('input[type="file"]');
-      const file = fileInput?.files?.[0];
-      if (!file) return alert("CSVファイルを選択してください");
-
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const binary = new Uint8Array(reader.result);
-        const base64 = btoa(String.fromCharCode(...binary));
-        const staff = document.getElementById("name")?.value || "unknown";
-        const body = {
-          filename: file.name,
-          staff: staff,
-          content: base64
-        };
-        try {
-          const res = await fetch("/.netlify/functions/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-          });
-          const data = await res.json();
-          alert(data.status === "success" ? "アップロード成功: " + data.path : "失敗: " + data.error);
-        } catch (e) {
-          alert("通信エラー: " + e.message);
-        }
       };
       reader.readAsArrayBuffer(file);
     });
   }
 });
 </script><script>
-document.getElementById("checkDataButton").addEventListener("click", async () => {
-  const staffName = document.getElementById("name")?.value?.trim();
-  if (!staffName) return alert("担当者名が未入力です");
-
-  try {
-    const res = await fetch("/.netlify/functions/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ staffName })
-    });
-    const json = await res.json();
-    const data = json.data || [];
-
-    const container = document.getElementById("checkResult") || (() => {
-      const d = document.createElement("div");
-      d.id = "checkResult";
-      d.style.marginTop = "24px";
-      document.body.appendChild(d);
-      return d;
-    })();
-
-    if (data.length === 0) {
-      container.innerHTML = "<p>該当する記録はありません。</p>";
-      return;
-    }
 
     const table = document.createElement("table");
     table.style.borderCollapse = "collapse";
