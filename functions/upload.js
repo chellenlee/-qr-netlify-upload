@@ -2,7 +2,6 @@ const { Dropbox } = require("dropbox");
 const fetch = require("node-fetch");
 
 async function getAccessToken() {
-  console.log("Requesting Dropbox access token...");
   const res = await fetch("https://api.dropboxapi.com/oauth2/token", {
     method: "POST",
     headers: {
@@ -17,54 +16,51 @@ async function getAccessToken() {
     })
   });
   const json = await res.json();
-  console.log("Access token response:", json);
   return json.access_token;
 }
 
-exports.handler = async function(event) {
-  console.log("Upload function invoked");
+exports.handler = async (event) => {
+  console.log("=== upload.js invoked ===");
+
   try {
-    console.log("Raw event.body:", event.body);
+    const body = JSON.parse(event.body || '{}');
+    const { filename, staff, content } = body;
+
+    if (!filename || !filename.endsWith('.csv')) {
+      throw new Error("Invalid or missing .csv filename.");
+    }
+    if (!staff || typeof staff !== 'string') {
+      throw new Error("Invalid or missing staff name.");
+    }
+    if (!/^[A-Za-z0-9+/=\s]+$/.test(content)) {
+      throw new Error("Invalid base64 content.");
+    }
 
     const token = await getAccessToken();
     const dbx = new Dropbox({ accessToken: token, fetch });
 
-    const body = JSON.parse(event.body);
-    const { filename, staff, content } = body;
-
-    console.log("Parsed body fields:");
-    console.log("filename:", filename);
-    console.log("staff:", staff);
-    console.log("content length:", content ? content.length : "undefined");
-
-    if (!filename || !staff || !content) {
-      throw new Error("Missing one or more required fields.");
-    }
-
     const buffer = Buffer.from(content, "base64");
-    const now = new Date().toISOString().replace(/:/g, "-");
+    const now = new Date().toISOString().replace(/[:.]/g, "-");
     const path = `/QRデータ/${staff}_${now}_${filename}`;
 
-    console.log("Uploading to Dropbox at path:", path);
-
-    await dbx.filesUpload({
-      path,
+    const uploadRes = await dbx.filesUpload({
+      path: path,
       contents: buffer,
-      mode: "add",
-      autorename: true,
-      mute: false
+      mode: 'add',
+      autorename: false
     });
 
-    console.log("Upload successful.");
+    console.log(`Uploaded to: ${uploadRes.result.path_display}`);
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ status: "success", path })
+      body: JSON.stringify({ status: 'success', path: uploadRes.result.path_display })
     };
   } catch (err) {
     console.error("Upload error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message })
+      body: JSON.stringify({ status: 'error', error: err.message })
     };
   }
 };

@@ -1,54 +1,67 @@
-const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
-const { Dropbox } = require('dropbox');
+const fetch = require("node-fetch");
+const { Dropbox } = require("dropbox");
+
+async function getAccessToken() {
+  const res = await fetch("https://api.dropboxapi.com/oauth2/token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Basic " + Buffer.from(
+        process.env.DROPBOX_APP_KEY + ":" + process.env.DROPBOX_APP_SECRET
+      ).toString("base64"),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: process.env.DROPBOX_REFRESH_TOKEN
+    })
+  });
+  const json = await res.json();
+  return json.access_token;
+}
 
 exports.handler = async (event) => {
   console.log("=== check.js invoked ===");
-  let staffName;
 
   try {
     const body = JSON.parse(event.body || '{}');
-    staffName = body.staffName;
+    const staffName = body.staffName;
+
+    if (!staffName || typeof staffName !== 'string') {
+      throw new Error("Invalid or missing staffName.");
+    }
     console.log("Received staffName:", staffName);
-  } catch (e) {
-    console.error("Failed to parse body:", e);
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Invalid request body" }),
-    };
-  }
 
-  if (!DROPBOX_TOKEN) {
-    console.log("Missing Dropbox token");
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Missing Dropbox token" }),
-    };
-  }
+    const token = await getAccessToken();
+    const dbx = new Dropbox({ accessToken: token, fetch });
 
-  if (!staffName) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "No staffName" }),
-    };
-  }
+    const folderRes = await dbx.filesListFolder({ path: '/QRデータ' });
+    const files = folderRes.result.entries.filter(file =>
+      file.name.includes(staffName) && file.name.endsWith('.csv')
+    );
 
-  const dbx = new Dropbox({ accessToken: DROPBOX_TOKEN, fetch });
+    if (files.length === 0) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ files: [], message: "一致するCSVファイルが見つかりませんでした。" })
+      };
+    }
 
-  try {
-    const response = await dbx.filesListFolder({ path: "" });
-    const files = response.result.entries
-      .filter(entry => entry.name.includes(staffName))
-      .map(entry => entry.name);
+    const fileContents = await Promise.all(
+      files.map(async file => {
+        const res = await dbx.filesDownload({ path: file.path_lower });
+        return res.result.fileBinary.toString('utf8');
+      })
+    );
 
     return {
       statusCode: 200,
-      body: JSON.stringify(files),
+      body: JSON.stringify({ files: fileContents })
     };
   } catch (err) {
-    console.error("Dropbox API error:", err);
+    console.error("check.js error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Dropbox API error", details: err.message }),
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
