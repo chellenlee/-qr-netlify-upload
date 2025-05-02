@@ -60,11 +60,18 @@
     async function checkUploadedData() {
       const statusDiv = document.getElementById("status");
       const fileList = document.getElementById("fileList");
+      const staffInput = document.getElementById("staffInput");
+      const staff = staffInput.value.trim();
       fileList.innerHTML = "";
       statusDiv.innerText = "確認中...";
 
+      if (!staff) {
+        statusDiv.innerText = "担当者名を入力してください。";
+        return;
+      }
+
       try {
-        const response = await fetch("/.netlify/functions/check");
+        const response = await fetch("/.netlify/functions/check?staff=" + encodeURIComponent(staff));
         const result = await response.json();
 
         if (response.ok && result.entries) {
