@@ -1,83 +1,65 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>QR通過記録アプリ</title>
+  <meta charset="UTF-8" />
+  <title>CSVアップロード</title>
 </head>
 <body>
-  <h1>QR通過記録アプリ</h1>
-  <button onclick="uploadToDropbox()">アップロード</button>
+  <h1>CSVアップロード</h1>
+  <input type="file" id="fileInput" />
+  <input type="text" id="staffInput" placeholder="担当者名を入力" />
+  <button onclick="uploadFile()">アップロード</button>
+  <div id="status"></div>
 
   <script>
-    let scannedData = [{ id: "001", name: "地点1", division: "A", bibNumber: "123", runnerName: "田中太郎", gender: "M", date: "2025-05-02", time: "12:34:56", staff: "雄亮船橋" }];
+    async function uploadFile() {
+      const fileInput = document.getElementById("fileInput");
+      const staffInput = document.getElementById("staffInput");
+      const statusDiv = document.getElementById("status");
 
-    function generateCSV() {
-      let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
-      scannedData.forEach(data => {
-        csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
-      });
-      return csv;
-    }
-
-    function uploadToDropbox() {
-      alert("uploadToDropbox が呼び出されました");
-
-      if (!scannedData || scannedData.length === 0) {
-        alert("アップロードするデータがありません。");
+      if (!fileInput.files.length) {
+        statusDiv.innerText = "ファイルを選択してください。";
+        return;
+      }
+      if (!staffInput.value.trim()) {
+        statusDiv.innerText = "担当者名を入力してください。";
         return;
       }
 
-      const csv = generateCSV();
-      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-      const formData = new FormData();
-      formData.append("file", blob, "upload.csv");
+      const file = fileInput.files[0];
+      const reader = new FileReader();
 
-      fetch("/.netlify/functions/upload", {
-        method: "POST",
-        body: formData
-      })
-      .then(async res => {
-        let data;
+      reader.onload = async function () {
+        const base64 = reader.result.split(",")[1]; // データ部分のみ抽出
+
+        const payload = {
+          filename: file.name,
+          staff: staffInput.value.trim(),
+          content: base64
+        };
+
         try {
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            data = await res.json();
+          const response = await fetch("/.netlify/functions/upload", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await response.json();
+          if (response.ok) {
+            statusDiv.innerText = "アップロード成功：" + result.path;
           } else {
-            data = { success: false, error: `無効な応答（HTTP ${res.status}）` };
+            statusDiv.innerText = "アップロード失敗：" + result.error;
           }
-        } catch (e) {
-          data = { success: false, error: `JSON解析失敗（HTTP ${res.status}）` };
+        } catch (err) {
+          statusDiv.innerText = "エラー：" + err.message;
         }
+      };
 
-        if (res.ok && data.success) {
-          alert("Dropboxにアップロードしました。");
-        } else {
-          alert("アップロードに失敗しました: " + (data.error || `HTTP ${res.status}`));
-        }
-      })
-      .catch(err => {
-        alert("通信エラー: " + err.message);
-      });
+      reader.readAsDataURL(file); // Base64化
     }
   </script>
-
-  <script>
-    window.uploadToDropbox = uploadToDropbox;
-  </script>
-
-  <!-- Service Worker を一時無効化 -->
-  <!--
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
-        console.log('ServiceWorker registered with scope:', registration.scope);
-      }).catch(function(error) {
-        console.log('ServiceWorker registration failed:', error);
-      });
-    }
-  </script>
-  -->
-
 </body>
 </html>
