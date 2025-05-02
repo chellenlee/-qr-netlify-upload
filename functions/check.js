@@ -1,52 +1,49 @@
 const { Dropbox } = require("dropbox");
-const fetch = require("node-fetch");
 
-async function getAccessToken() {
-  const res = await fetch("https://api.dropboxapi.com/oauth2/token", {
-    method: "POST",
-    headers: {
-      "Authorization": "Basic " + Buffer.from(
-        process.env.DROPBOX_APP_KEY + ":" + process.env.DROPBOX_APP_SECRET
-      ).toString("base64"),
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: process.env.DROPBOX_REFRESH_TOKEN
-    })
-  });
-  const json = await res.json();
-  return json.access_token;
-}
+exports.handler = async function(event, context) {
+  console.log("=== check.js invoked ===");
 
-exports.handler = async function (event) {
+  const staffName = event.queryStringParameters?.staff;
+  if (!staffName) {
+    console.log("No staffName in query");
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: "No staffName" })
+    };
+  }
+
+  console.log("Received staffName:", staffName);
+
+  const accessToken = process.env.DROPBOX_ACCESS_TOKEN;
+  if (!accessToken) {
+    console.log("Missing Dropbox token");
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Missing Dropbox token" })
+    };
+  }
+
+  const dbx = new Dropbox({ accessToken });
+
   try {
-    const token = await getAccessToken();
-    const dbx = new Dropbox({ accessToken: token, fetch });
+    const response = await dbx.filesListFolder({ path: "/QRデータ" });
+    console.log("Dropbox API responded with", response.result.entries.length, "entries");
 
-    const { staffName } = JSON.parse(event.body || "{}");
-    if (!staffName) {
-      return { statusCode: 400, body: JSON.stringify({ error: "No staffName" }) };
-    }
-
-    const list = await dbx.filesListFolder({ path: "/QRデータ" });
-    const matched = list.result.entries.filter(f => f.name.includes(staffName));
-
-    const fileContents = await Promise.all(
-      matched.map(async (file) => {
-        const res = await dbx.filesDownload({ path: file.path_display });
-        return res.result.fileBinary.toString("utf8");
-      })
+    const matched = response.result.entries.filter(
+      file => file.name.startsWith(staffName + "_") && file.name.endsWith(".csv")
     );
+
+    console.log("Matched", matched.length, "files");
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ files: fileContents })
+      body: JSON.stringify({ entries: matched })
     };
   } catch (err) {
+    console.error("Dropbox API error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message })
+      body: JSON.stringify({ error: "Dropbox API error", details: err.message })
     };
   }
 };
