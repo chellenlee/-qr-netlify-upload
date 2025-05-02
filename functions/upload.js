@@ -1,77 +1,61 @@
-const { Dropbox } = require('dropbox');
-const fetch = require('node-fetch');
+const { Dropbox } = require("dropbox");
+const fetch = require("node-fetch");
+const multiparty = require("multiparty");
 
-exports.handler = async (event) => {
-  console.log("HTTP Method:", event.httpMethod);
+async function getAccessToken() {
+  const res = await fetch("https://api.dropboxapi.com/oauth2/token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Basic " + Buffer.from(
+        process.env.DROPBOX_APP_KEY + ":" + process.env.DROPBOX_APP_SECRET
+      ).toString("base64"),
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: process.env.DROPBOX_REFRESH_TOKEN
+    })
+  });
+  const json = await res.json();
+  return json.access_token;
+}
 
-  if (event.httpMethod === 'GET') {
-    const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
-    try {
-      const info = await dbx.usersGetCurrentAccount();
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          status: "valid",
-          account: info.result.name.display_name,
-          email: info.result.email
-        })
-      };
-    } catch (err) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ status: "invalid", error: err.message })
-      };
-    }
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-  }
-
+exports.handler = async function (event) {
   try {
-    const contentType = event.headers['content-type'] || event.headers['Content-Type'];
-    const boundaryMatch = contentType.match(/boundary=(.+)$/);
-    if (!boundaryMatch) throw new Error("No boundary found in content-type");
+    const token = await getAccessToken();
+    const dbx = new Dropbox({ accessToken: token, fetch });
 
-    const boundary = boundaryMatch[1];
-    const bodyBuffer = Buffer.from(event.body, 'base64');
-    const parts = bodyBuffer.toString('utf8').split(`--${boundary}`);
+    const form = new multiparty.Form();
+    const data = await new Promise((resolve, reject) =>
+      form.parse(event, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve({ fields, files });
+      })
+    );
 
-    for (let part of parts) {
-      if (part.includes('Content-Disposition') && part.includes('filename=')) {
-       const headerEnd = part.indexOf("\r\n\r\n");
-        if (headerEnd === -1) continue;
+    const file = data.files.file[0];
+    const contents = require("fs").readFileSync(file.path);
+    const filename = data.fields.filename[0];
+    const staff = data.fields.staff[0];
+    const now = new Date().toISOString().replace(/:/g, "-");
+    const path = `/QRデータ/${staff}_${now}_${filename}`;
 
-        const headers = part.slice(0, headerEnd);
-        const content = part.slice(headerEnd + 4).replace(/\r\n--$/, '').trimEnd();
-        
-        const filenameMatch = headers.match(/filename="(.+?)"/);
-        if (!filenameMatch) continue;
+    await dbx.filesUpload({
+      path,
+      contents,
+      mode: "add",
+      autorename: true,
+      mute: false
+    });
 
-        const fileName = filenameMatch[1];
-        const dbx = new Dropbox({ accessToken: process.env.DROPBOX_TOKEN, fetch });
-
-        const result = await dbx.filesUpload({
-          path: `/QRデータ/${fileName}`,
-          contents: Buffer.from(content, 'utf8'),
-          mode: 'add',
-          autorename: true,
-          mute: false
-        });
-
-        return {
-          statusCode: 200,
-          body: JSON.stringify({ success: true, path: result.path_display })
-        };
-      }
-    }
-
-    return { statusCode: 400, body: JSON.stringify({ error: "No file found in form data" }) };
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ status: "success", path })
+    };
   } catch (err) {
-    console.error("Upload error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ success: false, error: err.message })
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
