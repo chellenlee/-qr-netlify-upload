@@ -1,15 +1,14 @@
 <!DOCTYPE html>
-
 <html lang="ja">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1" name="viewport"/>
-<title>橘湾岸ＱＲ2025春</title>
-<link href="manifest.json" rel="manifest"/>
-<link href="icon.png" rel="icon" type="image/png"/>
-<meta content="#003366" name="theme-color"/>
-<!--
-<script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>橘湾岸ＱＲ2025春</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.png" type="image/png">
+  <meta name="theme-color" content="#003366">
+  <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./service-worker.js').then(function(registration) {
         console.log('ServiceWorker registered with scope:', registration.scope);
@@ -18,8 +17,8 @@
       });
     }
   </script>
-  -->
-<style>
+
+  <style>
     body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; font-size: 18px; }
     #title-banner {
       background-color: #003366; /* 紺色背景 */
@@ -97,50 +96,55 @@
     }
   </style>
 </head>
+
 <body>
+
 <div id="title-banner">橘湾岸ＱＲ2025春</div>
+
 <div id="setup">
-<h2 style="text-align:left; margin-left: 2em;">担当者名と地点を設定</h2>
-<input id="staffName" placeholder="担当者名を入力" type="text"/>
-<br/>
-<select id="location">
-<option value="">地点を選択</option>
-</select>
-<br/>
-<button class="start-button" onclick="confirmChange()">開始/変更</button><button class="start-button" id="checkDataButton" style="margin-top: 12px; margin-left: 0px; display: block;">データ確認</button>
-<!-- 保存ボタンを追加 -->
-<button class="save-button" onclick="uploadToDropbox()">アップロード</button>
+  <h2 style="text-align:left; margin-left: 2em;">担当者名と地点を設定</h2>
+  <input type="text" id="staffName" placeholder="担当者名を入力">
+  <br>
+  <select id="location">
+    <option value="">地点を選択</option>
+  </select>
+  <br>
+  <button class="start-button" onclick="confirmChange()">開始/変更</button>
+  <!-- 保存ボタンを追加 -->
+<button class="save-button" onclick="uploadToDropbox()">データ保存</button>
 </div>
+
 <div id="reader" style="display:none;">
-<h3 id="message">読み取り中...</h3>
-<video id="video" playsinline=""></video>
-<br/>
-<button class="save-button" onclick="uploadToDropbox()">アップロード</button>
-<!-- 右下に終了ボタンを追加 -->
-<button class="save-button" onclick="endApp()">終了</button>
+  <h3 id="message">読み取り中...</h3>
+  <video id="video" playsinline></video>
+  <br>
+<button class="save-button" onclick="uploadToDropbox()">データ保存</button>  <!-- ZIP/メールボタン削除済み -->
+
+  <!-- 右下に終了ボタンを追加 -->
+  <button class="save-button" onclick="endApp()">終了</button>
 </div>
-<div id="result" style="display:none;">
-<div id="latest"></div>
-</div>
+
 <div id="history" style="display:none;">
-<h3>読み取り履歴</h3>
-<table>
-<thead>
-<tr>
-<th>地点ID</th><th>地点名</th><th>部門</th><th>ゼッケン</th><th>氏名</th><th>性別</th><th>日付</th><th>時刻</th><th>担当者</th>
-</tr>
-</thead>
-<tbody id="historyTable"></tbody>
-</table>
+  <h3>読み取り履歴</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>地点ID</th><th>地点名</th><th>部門</th><th>ゼッケン</th><th>氏名</th><th>性別</th><th>日付</th><th>時刻</th><th>担当者</th>
+      </tr>
+    </thead>
+    <tbody id="historyTable"></tbody>
+  </table>
 </div>
+
 <div id="popup-overlay">
-<div id="popup">
-<h2 id="popup-title">チェックOK</h2>
-<p id="popup-info"></p>
-<button onclick="continueScan()">OK</button>
-<button onclick="endApp()">終了</button>
+  <div id="popup">
+    <h2 id="popup-title">チェックOK</h2>
+    <p id="popup-info"></p>
+    <button onclick="continueScan()">OK</button>
+    <button onclick="endApp()">終了</button>
+  </div>
 </div>
-</div>
+
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 <script>
 let staff = '';
@@ -197,10 +201,10 @@ function confirmChange() {
         { text: "キャンセル", value: false }
       ],
       callback: (result) => {
-        if (!result) {
-          uploadToDropbox();
-          return;
-        }
+if (!result) {
+  uploadToDropbox();
+  return;
+}
         scannedData = [];
         localStorage.setItem('history', JSON.stringify(scannedData));
         updateHistory();
@@ -215,10 +219,14 @@ function confirmChange() {
 function startApp() {
   staff = document.getElementById('staffName').value.trim();
   const locationId = document.getElementById('location').value;
-  if (!staff || !locationId) {
-    alert("担当者名と地点を入力・選択してください");
-    return;
-  }
+if (!staff || !locationId) {
+  showCustomPopup({
+    title: "確認",
+    message: "担当者名と地点を入力・選択してください。",
+    buttons: [{ text: "OK", value: true }]
+  });
+  return;
+}
   localStorage.setItem('staffName', staff);
   selectedLocationId = locationId;
   selectedLocationName = locations.find(loc => loc.id == locationId).name;
@@ -318,38 +326,76 @@ function updateHistory() {
   });
 }
 
-// 保存ボタン用
+function uploadToDropbox() {
+  if (!scannedData || scannedData.length === 0) {
+    showCustomPopup({
+      title: "確認",
+      message: "アップロードするデータがありません。",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+
+  const firstLocation = scannedData[0]?.name || '未選択';
+  const firstStaff = scannedData[0]?.staff || '未選択';
+  const safeLocation = firstLocation.replace(/\s+/g, '_');
+  const safeStaff = firstStaff.replace(/\s+/g, '_');
+
   let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
   scannedData.forEach(data => {
     csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
   });
-  
-  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
- const blob = new Blob([bom, csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+
   const now = new Date();
-  const timestamp = now.getFullYear().toString() + 
-                     (now.getMonth()+1).toString().padStart(2, '0') + 
-                     now.getDate().toString().padStart(2, '0') + "_" +
-                     now.getHours().toString().padStart(2, '0') + 
-                     now.getMinutes().toString().padStart(2, '0') + 
-                     now.getSeconds().toString().padStart(2, '0');
+  const timestamp = now.getFullYear().toString()
+    + (now.getMonth() + 1).toString().padStart(2, '0')
+    + now.getDate().toString().padStart(2, '0') + "_"
+    + now.getHours().toString().padStart(2, '0')
+    + now.getMinutes().toString().padStart(2, '0')
+    + now.getSeconds().toString().padStart(2, '0');
 
-  const safeLocation = selectedLocationName.replace(/\s+/g, '_');
-  const safeStaff = staff.replace(/\s+/g, '_');
+  const filename = `${safeLocation}_${safeStaff}_${timestamp}.csv`;
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+  const reader = new FileReader();
 
-  a.href = url;
-  a.download = `${safeLocation}_${safeStaff}_${timestamp}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  reader.onloadend = async () => {
+    const base64data = reader.result.split(',')[1];
 
-  scannedData = [];
-  updateHistory();
+    try {
+      const res = await fetch('/.netlify/functions/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename,
+          staff: safeStaff,
+          content: base64data
+        })
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        showCustomPopup({
+          title: "アップロード完了",
+          message: `Dropboxに保存しました。<br>${filename}`,
+          buttons: [{ text: "OK", value: true }]
+        });
+      } else {
+        throw new Error(result.error || 'アップロードに失敗しました');
+      }
+    } catch (err) {
+      showCustomPopup({
+        title: "エラー",
+        message: err.message,
+        buttons: [{ text: "OK", value: true }]
+      });
+    }
+  };
+
+  reader.readAsDataURL(blob);
 }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <script>
 function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
   const overlay = document.getElementById('popup-overlay');
@@ -376,157 +422,5 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
   overlay.style.display = 'flex';
 }
 </script>
-<script>
-// アップロード処理
-// DROPBOX_ACCESS_TOKEN 削除
-
-
-function uploadToDropbox() {
-  showCustomPopup({
-    title: "アップロード開始",
-    message: "キャッシュからCSVを生成し、Dropboxへ送信しています。",
-    buttons: [{ text: "OK" }]
-  });
-  alert("アップロード処理を開始します");  // ← デバッグ用表示
-
-  if (!scannedData || scannedData.length === 0) {
-    alert("アップロードするデータがありません。");
-    return;
-  }
-
-  const csv = generateCSV();
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-  const formData = new FormData();
-  formData.append("file", blob, "upload.csv");
-
-  fetch("/.netlify/functions/upload", {
-    method: "POST",
-    body: formData
-  })
-  .then(async res => {
-    let data;
-    try {
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        data = { success: false, error: `無効な応答（HTTP ${res.status}）` };
-      }
-    } catch (e) {
-      data = { success: false, error: `JSON解析失敗（HTTP ${res.status}）` };
-    }
-
-    if (res.ok && data.success) {
-      alert("Dropboxにアップロードしました。");
-    } else {
-      alert("アップロードに失敗しました: " + (data.error || `HTTP ${res.status}`));
-    }
-  })
-  .catch(err => {
-    alert("通信エラー: " + err.message);
-  });
-}
-
-// データ確認処理
-
-  fetch("/.netlify/functions/check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ staffName })
-  })
-  .then(res => res.json())
-  .then(data => {
-    const csvTexts = data.files;
-    let recordMap = new Map();
-    csvTexts.forEach(text => {
-      const rows = text.trim().split("
-").slice(1);
-      rows.forEach(row => {
-        const cols = row.split(",");
-        const key = `${cols[0]}_${cols[2]}`;
-        const datetime = `${cols[6]} ${cols[7]}`;
-        if (!recordMap.has(key) || datetime < recordMap.get(key).datetime) {
-          recordMap.set(key, { row: cols, datetime });
-        }
-      });
-    });
-
-    const combined = [...recordMap.values()].map(v => v.row);
-    combined.sort((a, b) => {
-      if (a[0] !== b[0]) return a[0].localeCompare(b[0]);
-      return `${a[6]} ${a[7]}`.localeCompare(`${b[6]} ${b[7]}`);
-    });
-
-    const table = document.createElement("table");
-    table.border = "1";
-    const header = ["地点ID", "地点名", "部門", "ゼッケン番号", "氏名", "性別", "日付", "時刻", "担当者"];
-    const thead = table.insertRow();
-    header.forEach(h => thead.insertCell().textContent = h);
-    combined.forEach(row => {
-      const tr = table.insertRow();
-      row.forEach(col => tr.insertCell().textContent = col);
-    });
-
-    let result = document.getElementById("result");
-    if (!result) {
-      result = document.createElement("div");
-      result.id = "result";
-      document.body.appendChild(result);
-    }
-    result.innerHTML = "";
-    result.appendChild(table);
-    result.style.display = "";
-  })
-  .catch(err => {
-    alert("データの取得に失敗しました");
-    console.error(err);
-  });
-}
-
-</script>
-<script>
-  window.uploadToDropbox = uploadToDropbox;
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  }
-});
-</script><script>
-
-    const table = document.createElement("table");
-    table.style.borderCollapse = "collapse";
-    table.style.marginTop = "12px";
-    table.style.width = "100%";
-
-    const header = document.createElement("tr");
-    ["地点", "部門", "ゼッケン", "氏名", "日付", "時刻", "担当者"].forEach(h => {
-      const th = document.createElement("th");
-      th.textContent = h;
-      th.style.border = "1px solid #ccc";
-      th.style.padding = "4px";
-      th.style.background = "#eee";
-      header.appendChild(th);
-    });
-    table.appendChild(header);
-
-    data.forEach(row => {
-      const tr = document.createElement("tr");
-      row.forEach(cell => {
-        const td = document.createElement("td");
-        td.textContent = cell;
-        td.style.border = "1px solid #ccc";
-        td.style.padding = "4px";
-        tr.appendChild(td);
-      });
-      table.appendChild(tr);
-    });
-
-    container.innerHTML = "";
-    container.appendChild(table);
-  } catch (err) {
-    alert("データ確認エラー：" + err.message);
-  }
-});
-</script></body>
+</body>
 </html>
-
