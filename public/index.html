@@ -1,93 +1,38 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>CSVアップロード＋確認</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>データ確認テスト</title>
 </head>
 <body>
-  <h1>CSVアップロードと確認</h1>
-
-  <input type="file" id="fileInput" />
-  <input type="text" id="staffInput" placeholder="担当者名を入力" />
-  <button onclick="uploadFile()">アップロード</button>
-  <hr />
+  <h1>QR通過記録アプリ（確認テスト）</h1>
   <button onclick="checkUploadedData()">データ確認</button>
-  <div id="status"></div>
-  <ul id="fileList"></ul>
 
   <script>
-    async function uploadFile() {
-      const fileInput = document.getElementById("fileInput");
-      const staffInput = document.getElementById("staffInput");
-      const statusDiv = document.getElementById("status");
-
-      if (!fileInput.files.length || !staffInput.value.trim()) {
-        statusDiv.innerText = "ファイルと担当者名を入力してください。";
+    function checkUploadedData() {
+      const staffName = localStorage.getItem('staffName');
+      if (!staffName) {
+        alert('担当者が未設定です。');
         return;
       }
 
-      const file = fileInput.files[0];
-      const reader = new FileReader();
-
-      reader.onload = async function () {
-        const base64 = reader.result.split(",")[1];
-
-        const payload = {
-          filename: file.name,
-          staff: staffInput.value.trim(),
-          content: base64
-        };
-
-        try {
-          const response = await fetch("/.netlify/functions/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-
-          const result = await response.json();
-          statusDiv.innerText = response.ok
-            ? "アップロード成功：" + result.path
-            : "アップロード失敗：" + result.error;
-        } catch (err) {
-          statusDiv.innerText = "エラー：" + err.message;
-        }
-      };
-
-      reader.readAsDataURL(file);
+      fetch('/.netlify/functions/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffName })
+      })
+        .then(response => response.text())
+        .then(data => {
+          alert('アップロード済データ:\n' + data);
+        })
+        .catch(error => {
+          console.error('チェックエラー:', error);
+          alert('取得失敗: ' + error.message);
+        });
     }
 
-    async function checkUploadedData() {
-      const statusDiv = document.getElementById("status");
-      const fileList = document.getElementById("fileList");
-      const staffInput = document.getElementById("staffInput");
-      const staff = staffInput.value.trim();
-      fileList.innerHTML = "";
-      statusDiv.innerText = "確認中...";
-
-      if (!staff) {
-        statusDiv.innerText = "担当者名を入力してください。";
-        return;
-      }
-
-      try {
-        const response = await fetch("/.netlify/functions/check?staff=" + encodeURIComponent(staff));
-        const result = await response.json();
-
-        if (response.ok && result.entries) {
-          statusDiv.innerText = "取得成功：" + result.entries.length + "件";
-          result.entries.forEach(entry => {
-            const li = document.createElement("li");
-            li.textContent = entry.name + "（" + entry.client_modified + "）";
-            fileList.appendChild(li);
-          });
-        } else {
-          statusDiv.innerText = "取得失敗：" + result.error;
-        }
-      } catch (err) {
-        statusDiv.innerText = "通信エラー：" + err.message;
-      }
-    }
+    window.checkUploadedData = checkUploadedData;
   </script>
 </body>
 </html>
