@@ -1,52 +1,14 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>QR通過記録アプリ（最小構成＋データ確認）</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 2em;
-      background: #f5f5f5;
-    }
-    h1 {
-      text-align: center;
-    }
-    button {
-      display: block;
-      margin: 1em auto;
-      padding: 16px 32px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background-color: #007bff;
-      color: white;
-      box-shadow: 0 4px #0056b3;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-    button:active {
-      box-shadow: none;
-      transform: translateY(2px);
-    }
-    #result {
-      white-space: pre-wrap;
-      margin-top: 2em;
-      background: #fff;
-      padding: 1em;
-      border-radius: 8px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    }
-  </style>
+  <meta charset="UTF-8" />
+  <title>QR通過記録アプリ（修正版）</title>
 </head>
 <body>
-  <h1>QR通過記録アプリ</h1>
-
-  <input type="file" id="fileInput" accept=".csv">
+  <h1>QRアップロード＆確認</h1>
+  <input type="file" id="fileInput" accept=".csv" />
   <button id="uploadBtn">Dropboxアップロード</button>
   <button id="checkBtn">データ確認</button>
-
   <div id="result"></div>
 
   <script>
@@ -57,43 +19,62 @@
 
     uploadBtn.onclick = async () => {
       const file = fileInput.files[0];
-      if (!file) {
-        alert('ファイルを選択してください');
-        return;
-      }
-
+      if (!file) return alert('ファイルを選択してください');
       const formData = new FormData();
       formData.append('file', file, file.name);
 
       try {
-        const res = await fetch('/.netlify/functions/upload', {
-          method: 'POST',
-          body: formData
-        });
+        const res = await fetch('/.netlify/functions/upload', { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.success) {
-          alert('アップロード成功: ' + data.path);
-        } else {
-          alert('アップロード失敗: ' + data.error);
-        }
+        alert(data.success ? 'アップロード成功: ' + data.path : 'アップロード失敗: ' + data.error);
       } catch (e) {
         alert('エラー: ' + e.message);
       }
     };
 
     checkBtn.onclick = async () => {
+      const staffName = prompt("担当者名を入力してください");
+      if (!staffName) return;
+
       try {
-        const res = await fetch('/.netlify/functions/check');
+        const res = await fetch('/.netlify/functions/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ staffName })
+        });
         const data = await res.json();
-        if (data.entries) {
-          result.textContent = data.entries.map(e => e.name + " - " + e.server_modified).join("\n");
-        } else if (data.error) {
-          result.textContent = "エラー: " + data.error;
-        } else {
-          result.textContent = "不明な応答: " + JSON.stringify(data);
-        }
+        if (!data.files) throw new Error("ファイルがありません");
+
+        const csvTexts = data.files;
+        let recordMap = new Map();
+        csvTexts.forEach(text => {
+          const rows = text.trim().split("\n").slice(1);  // ← 検証ポイント：エスケープされた "\n"
+          rows.forEach(row => {
+            const cols = row.split(",");
+            const key = `${cols[0]}_${cols[2]}`;
+            const datetime = `${cols[6]} ${cols[7]}`;
+            if (!recordMap.has(key) || datetime < recordMap.get(key).datetime) {
+              recordMap.set(key, { row: cols, datetime });
+            }
+          });
+        });
+
+        const combined = [...recordMap.values()].map(v => v.row);
+        combined.sort((a, b) => a[0].localeCompare(b[0]) || `${a[6]} ${a[7]}`.localeCompare(`${b[6]} ${b[7]}`));
+
+        const table = document.createElement("table");
+        const header = ["地点ID", "地点名", "部門", "ゼッケン番号", "氏名", "性別", "日付", "時刻", "担当者"];
+        const thead = table.insertRow();
+        header.forEach(h => thead.insertCell().textContent = h);
+        combined.forEach(row => {
+          const tr = table.insertRow();
+          row.forEach(col => tr.insertCell().textContent = col);
+        });
+
+        result.innerHTML = "";
+        result.appendChild(table);
       } catch (e) {
-        result.textContent = "通信エラー: " + e.message;
+        result.textContent = "取得エラー: " + e.message;
       }
     };
   </script>
