@@ -17,6 +17,24 @@
       });
     }
   </script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+  <script>
+  const firebaseConfig = {
+   apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
+   authDomain: "tachibana-wangan.firebaseapp.com",
+   projectId: "tachibana-wangan",
+   storageBucket: "tachibana-wangan.firebasestorage.app",
+   messagingSenderId: "963128842192",
+   appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
+  };
+
+  // Firebaseの初期化
+  const app = firebase.initializeApp(firebaseConfig);
+  // Firestoreの取得
+  const db = firebase.firestore();
+  </script>
 
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; font-size: 18px; }
@@ -111,14 +129,14 @@
   <br>
   <button class="start-button" onclick="confirmChange()">開始/変更</button>
   <!-- 保存ボタンを追加 -->
-<button class="save-button" onclick="uploadToDropbox()">データ保存</button>
+<button class="save-button" onclick="uploadToFirebase()">データ保存</button>
 </div>
 
 <div id="reader" style="display:none;">
   <h3 id="message">読み取り中...</h3>
   <video id="video" playsinline></video>
   <br>
-<button class="save-button" onclick="uploadToDropbox()">データ保存</button>  <!-- ZIP/メールボタン削除済み -->
+<button class="save-button" onclick="uploadToFirebase()">データ保存</button>  <!-- ZIP/メールボタン削除済み -->
 
   <!-- 右下に終了ボタンを追加 -->
   <button class="save-button" onclick="endApp()">終了</button>
@@ -206,7 +224,7 @@ function confirmChange() {
       ],
       callback: (result) => {
 if (!result) {
-  uploadToDropbox();
+  uploadToFirebase();
   return;
 }
         scannedData = [];
@@ -330,7 +348,8 @@ function updateHistory() {
   });
 }
 
-function uploadToDropbox() {
+// 以下の関数で、既存の uploadToDropbox 関数を完全に置き換えます。
+async function uploadToFirebase() {
   if (!scannedData || scannedData.length === 0) {
     showCustomPopup({
       title: "確認",
@@ -342,61 +361,49 @@ function uploadToDropbox() {
 
   const firstLocation = scannedData[0]?.name || '未選択';
   const firstStaff = scannedData[0]?.staff || '未選択';
-  const safeLocation = firstLocation.replace(/\s+/g, '_');
-  const safeStaff = firstStaff.replace(/\s+/g, '_');
-
-  let csv = '地点ID,地点名,部門,ゼッケン,氏名,性別,日付,時刻,担当者\n';
-  scannedData.forEach(data => {
-    csv += `${data.id},${data.name},${data.division},${data.bibNumber},${data.runnerName},${data.gender},${data.date},${data.time},${data.staff}\n`;
-  });
-
+  
+  // 収集した全データを一つのドキュメントとしてFirestoreに保存するためのデータ構造を準備
   const now = new Date();
-  const timestamp = now.getFullYear().toString()
+  const timestampId = now.getFullYear().toString()
     + (now.getMonth() + 1).toString().padStart(2, '0')
     + now.getDate().toString().padStart(2, '0') + "_"
     + now.getHours().toString().padStart(2, '0')
     + now.getMinutes().toString().padStart(2, '0')
     + now.getSeconds().toString().padStart(2, '0');
 
-  const filename = `${safeLocation}_${safeStaff}_${timestamp}.csv`;
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-  const reader = new FileReader();
-
-  reader.onloadend = async () => {
-    const base64data = reader.result.split(',')[1];
-
-    try {
-      const res = await fetch('/.netlify/functions/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename,
-          staff: safeStaff,
-          content: base64data
-        })
-      });
-
-      const result = await res.json();
-
-      if (res.ok) {
-        showCustomPopup({
-          title: "アップロード完了",
-          message: `Dropboxに保存しました。<br>${filename}`,
-          buttons: [{ text: "OK", value: true }]
-        });
-      } else {
-        throw new Error(result.error || 'アップロードに失敗しました');
-      }
-    } catch (err) {
-      showCustomPopup({
-        title: "エラー",
-        message: err.message,
-        buttons: [{ text: "OK", value: true }]
-      });
-    }
+  const uploadData = {
+    locationId: selectedLocationId,
+    locationName: firstLocation,
+    staffName: firstStaff,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(), // Firestoreに正確な時刻を記録
+    readings: scannedData, // 読み取り履歴の配列をそのまま格納
+    fileName: `${firstLocation}_${firstStaff}_${timestampId}.json` // ファイル名相当
   };
 
-  reader.readAsDataURL(blob);
+  try {
+    // 'qr_scans'というコレクションにデータを追加します
+    // ドキュメントIDは自動生成されます
+    const docRef = await db.collection("qr_scans").add(uploadData);
+
+    showCustomPopup({
+      title: "アップロード完了",
+      message: `Firebaseに保存しました。<br>ドキュメントID: ${docRef.id}`,
+      buttons: [{ text: "OK", value: true }]
+    });
+    
+    // オプション: アップロード後に履歴をクリアしたい場合
+    // scannedData = [];
+    // localStorage.removeItem('history');
+    // updateHistory();
+    
+  } catch (err) {
+    console.error("Error writing document: ", err);
+    showCustomPopup({
+      title: "エラー",
+      message: `Firebaseへの保存に失敗しました。<br>${err.message}`,
+      buttons: [{ text: "OK", value: true }]
+    });
+  }
 }
 </script>
 
