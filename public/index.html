@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>橘湾岸ＱＲ2025春</title>
+  <title>橘湾岸ＱＲ2025秋</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
@@ -125,7 +125,7 @@
 
 <body>
 
-<div id="title-banner">橘湾岸ＱＲ2025春</div>
+<div id="title-banner">橘湾岸ＱＲ2025秋</div>
 
 <div id="setup">
   <h2 style="text-align:left; margin-left: 2em;">担当者名と地点を設定</h2>
@@ -268,7 +268,7 @@ async function startScanner() {
   const video = document.getElementById('video');
   codeReader = new ZXing.BrowserQRCodeReader();
 
-  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+  codeReader.decodeFromVideoDevice(undefined, video, async (result, err) => {
     if (result) {
       const text = result.text.trim();
       const parts = text.split('/');
