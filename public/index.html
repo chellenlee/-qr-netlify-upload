@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>橘湾岸ＱＲ2025春</title>
+  <title>橘湾岸ＱＲ2025秋</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
@@ -34,6 +34,14 @@
   const app = firebase.initializeApp(firebaseConfig);
   // Firestoreの取得
   const db = firebase.firestore();
+  db.enablePersistence()
+    .catch((err) => {
+      if (err.code == 'failed-precondition') {
+        console.warn("Firestore: Persistence failed (Multiple tabs open).", err);
+      } else if (err.code == 'unimplemented') {
+        console.warn("Firestore: Persistence failed (Browser not supported).", err);
+      }
+    });
   </script>
 
   <style>
@@ -117,7 +125,7 @@
 
 <body>
 
-<div id="title-banner">橘湾岸ＱＲ2025春</div>
+<div id="title-banner">橘湾岸ＱＲ2025秋</div>
 
 <div id="setup">
   <h2 style="text-align:left; margin-left: 2em;">担当者名と地点を設定</h2>
@@ -128,22 +136,14 @@
   </select>
   <br>
   <button class="start-button" onclick="confirmChange()">開始/変更</button>
-  <!-- 保存ボタンを追加 -->
-<button class="save-button" onclick="uploadToFirebase()">データ保存</button>
 </div>
 
 <div id="reader" style="display:none;">
   <h3 id="message">読み取り中...</h3>
   <video id="video" playsinline></video>
   <br>
-<button class="save-button" onclick="uploadToFirebase()">データ保存</button>  <!-- ZIP/メールボタン削除済み -->
 
-  <!-- 右下に終了ボタンを追加 -->
   <button class="save-button" onclick="endApp()">終了</button>
-</div>
-
-<div id="result" style="display:none;">
-  <div id="latest"></div>
 </div>
 
 <div id="history" style="display:none;">
@@ -216,15 +216,14 @@ function confirmChange() {
 
   if (selectedLocationId !== newLocationId && scannedData.length > 0) {
     showCustomPopup({
-      title: "確認",
-      message: "地点が変更されました。<br>履歴がクリアされます。<br>キャンセルすると保存します。",
-      buttons: [
-        { text: "クリア", value: true },
-        { text: "キャンセル", value: false }
-      ],
+      title: "確認",
+      message: "地点が変更されました。<br>現在の履歴をクリアしますか？", // メッセージを簡略化
+      buttons: [
+        { text: "クリアして続行", value: true }, // ボタン名を明確化
+        { text: "キャンセル", value: false }
+      ],
       callback: (result) => {
 if (!result) {
-  uploadToFirebase();
   return;
 }
         scannedData = [];
@@ -261,42 +260,51 @@ if (!staff || !locationId) {
   startScanner();
 }
 
-function startScanner() {
-  const video = document.getElementById('video');
-  codeReader = new ZXing.BrowserQRCodeReader();
+// startScanner() 関数
 
-  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
-    if (result) {
-      const text = result.text.trim();
-      const parts = text.split('/');
-      if (parts.length >= 4) {
-        const [division, bibNumber, runnerName, gender] = parts;
-        currentScan = { division, bibNumber, runnerName, gender };
-        if (!scannedData.some(item => item.division === division && item.bibNumber === bibNumber)) {
-          const now = new Date();
-          const date = now.toLocaleDateString('ja-JP');
-          const time = now.toLocaleTimeString('ja-JP');
-          scannedData.push({
-            id: selectedLocationId,
-            name: selectedLocationName,
-            division,
-            bibNumber,
-            runnerName,
-            gender,
-            date,
-            time,
-            staff
-          });
-          localStorage.setItem('history', JSON.stringify(scannedData));
-          updateHistory();
-          showPopup(true);
-        } else {
-          showPopup(false);
-        }
-      }
-      codeReader.reset();
-    }
-  }, { video: { facingMode: "environment" } });
+async function startScanner() {
+  const video = document.getElementById('video');
+  codeReader = new ZXing.BrowserQRCodeReader();
+
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+    if (result) {
+      const text = result.text.trim();
+      const parts = text.split('/');
+      
+      if (parts.length >= 4) {
+        const [division, bibNumber, runnerName, gender] = parts;
+        currentScan = { division, bibNumber, runnerName, gender };
+        
+        const now = new Date();
+        const date = now.toLocaleDateString('ja-JP');
+        const time = now.toLocaleTimeString('ja-JP');
+
+        // 新しいスキャンデータを作成
+        const newScanEntry = {
+          id: selectedLocationId,
+          name: selectedLocationName,
+          division,
+          bibNumber,
+          runnerName,
+          gender,
+          date,
+          time,
+          staff,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp() // サーバー時刻を記録
+        };
+            
+        // ローカル履歴（scannedData）に追加（画面表示用、重複チェックはFirestoreに任せる）
+        scannedData.push(newScanEntry);
+        localStorage.setItem('history', JSON.stringify(scannedData));
+        updateHistory();
+        
+        // ここでFirestoreのチェックと保存を呼び出す
+        await checkAndUploadToFirebase(newScanEntry);
+        
+        codeReader.reset();
+      }
+    }
+  }, { video: { facingMode: "environment" } });
 }
 
 function showPopup(success) {
@@ -348,62 +356,37 @@ function updateHistory() {
   });
 }
 
-// 以下の関数で、既存の uploadToDropbox 関数を完全に置き換えます。
-async function uploadToFirebase() {
-  if (!scannedData || scannedData.length === 0) {
-    showCustomPopup({
-      title: "確認",
-      message: "アップロードするデータがありません。",
-      buttons: [{ text: "OK", value: true }]
-    });
-    return;
-  }
+// 【重要】既存の autoUploadToFirebase 関数を削除し、以下の関数に置き換えてください。
+async function checkAndUploadToFirebase(scanEntry) {
+  // Firestore クエリを作成して重複をチェック
+  const querySnapshot = await db.collection("qr_entries")
+    .where('id', '==', scanEntry.id)           // 1. 同じ地点ID
+    .where('division', '==', scanEntry.division) // 2. 同じ部門
+    .where('bibNumber', '==', scanEntry.bibNumber) // 3. 同じゼッケン
+    .get();
+    
+  // 読み取り済みフラグ
+  const alreadyScanned = querySnapshot.docs.length > 0;
 
-  const firstLocation = scannedData[0]?.name || '未選択';
-  const firstStaff = scannedData[0]?.staff || '未選択';
-  
-  // 収集した全データを一つのドキュメントとしてFirestoreに保存するためのデータ構造を準備
-  const now = new Date();
-  const timestampId = now.getFullYear().toString()
-    + (now.getMonth() + 1).toString().padStart(2, '0')
-    + now.getDate().toString().padStart(2, '0') + "_"
-    + now.getHours().toString().padStart(2, '0')
-    + now.getMinutes().toString().padStart(2, '0')
-    + now.getSeconds().toString().padStart(2, '0');
+  if (alreadyScanned) {
+    // 重複が見つかった場合
+    showPopup(false); // 読み取り済みポップアップ
+    console.warn("Duplicate scan rejected by Firestore check:", scanEntry.bibNumber);
+    return; // 保存を中断
+  }
 
-  const uploadData = {
-    locationId: selectedLocationId,
-    locationName: firstLocation,
-    staffName: firstStaff,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(), // Firestoreに正確な時刻を記録
-    readings: scannedData, // 読み取り履歴の配列をそのまま格納
-    fileName: `${firstLocation}_${firstStaff}_${timestampId}.json` // ファイル名相当
-  };
+  // 重複がなければ保存を実行
+  try {
+    const docRef = await db.collection("qr_entries").add(scanEntry);
+    
+    showPopup(true); // チェックOKポップアップ
+    console.log("Firestore Auto Uploaded:", docRef.id);
 
-  try {
-    // 'qr_scans'というコレクションにデータを追加します
-    // ドキュメントIDは自動生成されます
-    const docRef = await db.collection("qr_scans").add(uploadData);
-
-    showCustomPopup({
-      title: "アップロード完了",
-      message: `Firebaseに保存しました。<br>ドキュメントID: ${docRef.id}`,
-      buttons: [{ text: "OK", value: true }]
-    });
-    
-    // オプション: アップロード後に履歴をクリアしたい場合
-    // scannedData = [];
-    // localStorage.removeItem('history');
-    // updateHistory();
-    
-  } catch (err) {
-    console.error("Error writing document: ", err);
-    showCustomPopup({
-      title: "エラー",
-      message: `Firebaseへの保存に失敗しました。<br>${err.message}`,
-      buttons: [{ text: "OK", value: true }]
-    });
-  }
+  } catch (err) {
+    // オフラインの場合、エラーにはなるがFirestoreのキューに自動的に入る
+    showPopup(true); // ユーザーには「OK」と表示し、裏で保存を試み続ける
+    console.error("Error during auto-upload (may be offline/permission denied):", err);
+  }
 }
 </script>
 
