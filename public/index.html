@@ -29,7 +29,7 @@
       text-align: center;
     }
     /* 画面エリア */
-    #setup, #reader, #result, #history-view { margin: 20px; }
+    #setup, #reader, #result, #history-view, #stats-view { margin: 20px; }
     
     #setup input, #setup select {
       text-align: left;
@@ -49,7 +49,7 @@
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
     /* ボタンのデザイン */
-    .save-button, .start-button, .history-button {
+    .save-button, .start-button, .history-button, .stats-button {
       color: white;
       border: none;
       padding: 10px 20px;
@@ -63,35 +63,37 @@
     .save-button, .start-button {
       background: linear-gradient(#888888, #666666);
     }
-    /* 履歴ボタンは少し色を変えて区別（青系） */
-    .history-button {
-      background: linear-gradient(#888888, #666666);
+    /* 履歴・統計ボタン（青系） */
+    .history-button, .stats-button {
+      background: linear-gradient(#4a90e2, #003366);
     }
 
-    .save-button:active, .start-button:active, .history-button:active {
+    .save-button:active, .start-button:active, .history-button:active, .stats-button:active {
       box-shadow: 0 2px #444444;
       transform: translateY(3px);
     }
 
-    /* 履歴テーブルのスタイル（5列表示用に調整） */
-    .history-table {
+    /* テーブル共通スタイル */
+    .history-table, .stats-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       background: white;
-      font-size: 13px; /* 5列入るよう文字を小さく */
+      font-size: 13px;
     }
-    .history-table th, .history-table td {
+    .history-table th, .history-table td, .stats-table th, .stats-table td {
       border: 1px solid #ccc;
-      padding: 4px;    /* 余白を詰める */
+      padding: 4px;
       text-align: center;
       line-height: 1.2;
     }
-    .history-table th {
+    .history-table th, .stats-table th {
       background-color: #eee;
-      white-space: nowrap; /* ヘッダー折り返しなし */
+      white-space: nowrap;
       font-size: 12px;
     }
+    /* 統計テーブル特有の調整 */
+    .stats-table th { background-color: #d0e0f0; }
 
     #popup-overlay {
       position: fixed;
@@ -132,6 +134,7 @@
   <button class="start-button" onclick="startApp()">開始</button>
   <br>
   <button class="history-button" onclick="showHistory()">履歴確認</button>
+  <button class="stats-button" onclick="showStats()">通過情報</button>
 </div>
 
 <div id="history-view" style="display:none;">
@@ -140,6 +143,13 @@
   <div id="history-list">データ読込中...</div>
   <br>
   <button class="save-button" onclick="closeHistory()">戻る</button>
+</div>
+
+<div id="stats-view" style="display:none;">
+  <h3>通過状況一覧</h3>
+  <div id="stats-list">集計中...</div>
+  <br>
+  <button class="save-button" onclick="closeStats()">戻る</button>
 </div>
 
 <div id="reader" style="display:none;">
@@ -267,7 +277,7 @@ function startApp() {
 }
 
 /**
- * ▼▼▼ 履歴を表示する関数 (カメラ停止・画面制御追加版) ▼▼▼
+ * 履歴を表示する関数
  */
 async function showHistory() {
   const staffInput = document.getElementById('staffName').value.trim();
@@ -280,17 +290,14 @@ async function showHistory() {
     return;
   }
 
-  // ★変更点1: カメラが起動中なら停止する（バッテリー節約・エラー防止）
   if (codeReader) {
     codeReader.reset();
   }
 
-  // ★変更点2: どの画面から呼ばれてもいいように、全ての画面を非表示にする
   document.getElementById('setup').style.display = 'none';
-  document.getElementById('reader').style.display = 'none'; // readerも消す
+  document.getElementById('reader').style.display = 'none'; 
   document.getElementById('result').style.display = 'none';
 
-  // 履歴画面を表示
   document.getElementById('history-view').style.display = 'block';
   document.getElementById('history-staff-display').textContent = staffInput;
   
@@ -298,7 +305,6 @@ async function showHistory() {
   listDiv.innerHTML = 'データを取得中...';
 
   try {
-    // 担当者名でフィルタリングして取得
     const snapshot = await firestore.collection('scans')
       .where('staff', '==', staffInput)
       .get();
@@ -308,20 +314,17 @@ async function showHistory() {
       return;
     }
 
-    // JavaScript側で日付順（新しい順）にソート
     let docs = snapshot.docs.map(doc => doc.data());
     docs.sort((a, b) => {
       const tA = a.scanTimestamp ? a.scanTimestamp.toMillis() : 0;
       const tB = b.scanTimestamp ? b.scanTimestamp.toMillis() : 0;
-      return tB - tA; // 降順
+      return tB - tA; 
     });
 
-    // テーブルヘッダーと内容（地点・部門・ゼッケン・氏名・時間）
     let html = '<table class="history-table">';
     html += '<tr><th>地点</th><th>部門</th><th>No.</th><th>氏名</th><th>時間</th></tr>';
     
     docs.forEach(d => {
-      // 秒まで表示
       const displayTime = d.time || '--:--:--';
       
       html += `<tr>
@@ -342,11 +345,103 @@ async function showHistory() {
     listDiv.innerHTML = '<p style="color:red;">履歴の取得に失敗しました。<br>通信環境を確認してください。</p>';
   }
 }
+
 /**
- * ▼▼▼ 履歴画面を閉じる関数 (新規追加) ▼▼▼
+ * 履歴画面を閉じる関数
  */
 function closeHistory() {
   document.getElementById('history-view').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+}
+
+/**
+ * ▼▼▼ 通過情報（統計）を表示する関数 (新規追加) ▼▼▼
+ */
+async function showStats() {
+  // 画面遷移
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('stats-view').style.display = 'block';
+
+  const listDiv = document.getElementById('stats-list');
+  listDiv.innerHTML = '全データを集計中...';
+
+  try {
+    // 1. スキャンデータを全取得 (件数が多い場合は注意が必要ですが、今回は全量取得で実装)
+    const snapshot = await firestore.collection('scans').get();
+    
+    // 2. 地点IDごとにカウント
+    const counts = {};
+    const retireCounts = {}; // リタイヤ地点のカウント用
+    let totalRetire = 0; // 全リタイヤ数
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const lid = d.id;
+      const lname = d.name || "";
+
+      // リタイヤ判定（地点名に「リタイヤ」が含まれるか）
+      if (lname.includes("リタイヤ") || lname.includes("リタイア")) {
+        if (!retireCounts[lid]) retireCounts[lid] = 0;
+        retireCounts[lid]++;
+        totalRetire++;
+      } else {
+        if (!counts[lid]) counts[lid] = 0;
+        counts[lid]++;
+      }
+    });
+
+    // 3. 表示用テーブルの生成
+    // 地点マスタ(locations)は initializeAppLogic で取得済みで、ID順に並んでいます
+    let html = '<table class="stats-table">';
+    html += '<tr><th>地点</th><th>通過</th><th>未通過</th><th>リタイヤ</th></tr>';
+
+    // 全体総数（最初の地点の通過数）を取得
+    // ※locations[0]がスタート地点であると仮定
+    let totalRunners = 0;
+    if (locations.length > 0) {
+      totalRunners = counts[locations[0].id] || 0;
+    }
+
+    // 各地点についてループ
+    locations.forEach((loc) => {
+      // リタイヤ地点は行見出しから除外
+      if (loc.name.includes("リタイヤ") || loc.name.includes("リタイア")) {
+        return;
+      }
+
+      const passed = counts[loc.id] || 0;
+      
+      // 未通過数の計算ロジック：
+      // 「前地点の通過者数(合計) + 前地点の未通過者数(合計) + リタイヤ者数(合計) - この地点の通過者数」
+      // 数学的には、前地点までの総和は常に「参加総数(totalRunners)」となります。
+      // したがって、未通過数 = 参加総数 - 現在地の通過数 となります。
+      const unpassed = totalRunners - passed;
+
+      html += `<tr>
+        <td style="text-align:left;">${loc.name}</td>
+        <td style="font-weight:bold; color:blue;">${passed}</td>
+        <td style="color:red;">${unpassed}</td>
+        <td>${totalRetire}</td> </tr>`;
+    });
+
+    html += '</table>';
+    html += `<p style="text-align:right; font-size:14px; color:#666;">※未通過数はスタート通過数基準<br>※リタイヤは全地点の合計</p>`;
+
+    listDiv.innerHTML = html;
+
+  } catch (error) {
+    console.error("集計エラー:", error);
+    listDiv.innerHTML = '<p style="color:red;">データの集計に失敗しました。<br>通信環境を確認してください。</p>';
+  }
+}
+
+/**
+ * 通過情報画面を閉じる関数
+ */
+function closeStats() {
+  document.getElementById('stats-view').style.display = 'none';
   document.getElementById('setup').style.display = '';
 }
 
@@ -521,7 +616,6 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
 // ▼▼▼ 3. 初期化処理 ▼▼▼
 
 try {
-  // Firebase初期化
   firebase.initializeApp(firebaseConfig);
   firestore = firebase.firestore();
 
