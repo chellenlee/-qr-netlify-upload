@@ -28,8 +28,9 @@
       font-weight: bold;
       text-align: center;
     }
-    /* #history を削除 */
-    #setup, #reader, #result { margin: 20px; }
+    /* 画面エリア */
+    #setup, #reader, #result, #history-view { margin: 20px; }
+    
     #setup input, #setup select {
       text-align: left;
       text-indent: 2em;
@@ -43,12 +44,12 @@
       margin-top: 10px;
       object-fit: cover;
     }
-    /* table関連を削除 (history削除のため) */
+    
     input, select, button { padding: 12px; font-size: 20px; margin: 8px; }
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
-    .save-button, .start-button {
-      background: linear-gradient(#888888, #666666);
+    /* ボタンのデザイン */
+    .save-button, .start-button, .history-button {
       color: white;
       border: none;
       padding: 10px 20px;
@@ -57,10 +58,36 @@
       box-shadow: 0 5px #444444;
       cursor: pointer;
       display: inline-block;
+      margin-top: 15px;
     }
-    .save-button:active, .start-button:active {
+    .save-button, .start-button {
+      background: linear-gradient(#888888, #666666);
+    }
+    /* 履歴ボタンは少し色を変えて区別（青系） */
+    .history-button {
+      background: linear-gradient(#4a90e2, #003366);
+    }
+
+    .save-button:active, .start-button:active, .history-button:active {
       box-shadow: 0 2px #444444;
       transform: translateY(3px);
+    }
+
+    /* 履歴テーブルのスタイル */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background: white;
+      font-size: 16px;
+    }
+    .history-table th, .history-table td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    .history-table th {
+      background-color: #eee;
     }
 
     #popup-overlay {
@@ -100,7 +127,17 @@
   </select>
   <br>
   <button class="start-button" onclick="startApp()">開始</button>
-  </div>
+  <br>
+  <button class="history-button" onclick="showHistory()">履歴を確認</button>
+</div>
+
+<div id="history-view" style="display:none;">
+  <h3>読み取り履歴</h3>
+  <p style="font-size:16px; margin:0;">担当: <span id="history-staff-display" style="font-weight:bold;"></span></p>
+  <div id="history-list">データ読込中...</div>
+  <br>
+  <button class="save-button" onclick="closeHistory()">戻る</button>
+</div>
 
 <div id="reader" style="display:none;">
   <h3 id="message">読み取り中...</h3>
@@ -126,114 +163,182 @@
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
 <script>
-// ▼▼▼ 1. グローバル変数とFirebase設定を先に定義 ▼▼▼
+// ▼▼▼ 1. グローバル変数とFirebase設定 ▼▼▼
 let firestore;
 let staff = '';
 let selectedLocationId = '';
 let selectedLocationName = '';
 let codeReader = null;
-let locations = []; // 動的ロードのため空にする
+let locations = []; 
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
-  authDomain: "tachibana-wangan.firebaseapp.com",
-  projectId: "tachibana-wangan",
-  storageBucket: "tachibana-wangan.firebasestorage.app",
-  messagingSenderId: "963128842192",
-  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
+  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
+  authDomain: "tachibana-wangan.firebaseapp.com",
+  projectId: "tachibana-wangan",
+  storageBucket: "tachibana-wangan.firebasestorage.app",
+  messagingSenderId: "963128842192",
+  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
 };
 
-// ▼▼▼ 2. すべての関数を先に定義 ▼▼▼
+// ▼▼▼ 2. 関数定義 ▼▼▼
 
 /**
- * アプリの初期化ロジック（地点マスターをFirestoreから読み込む）
- */
+ * アプリの初期化ロジック
+ */
 async function initializeAppLogic() {
-  const savedStaff = localStorage.getItem('staffName');
-  const savedLocationId = localStorage.getItem('locationId');
-  
-  if (savedStaff) document.getElementById('staffName').value = savedStaff;
+  const savedStaff = localStorage.getItem('staffName');
+  const savedLocationId = localStorage.getItem('locationId');
+  
+  if (savedStaff) document.getElementById('staffName').value = savedStaff;
 
-  const locationSelect = document.getElementById('location');
-  
-  // 1. 読み込み中の表示に変更
-  locationSelect.innerHTML = '<option value="">地点マスター読込中...</option>';
-  locationSelect.disabled = true;
+  const locationSelect = document.getElementById('location');
+  
+  locationSelect.innerHTML = '<option value="">地点マスター読込中...</option>';
+  locationSelect.disabled = true;
 
-  try {
-    // 2. Firestoreの 'locations_master' から 'id' 順でデータを取得
-    const snapshot = await firestore.collection("locations_master")
-                                    .orderBy("id", "asc")
-                                    .get();
+  try {
+    const snapshot = await firestore.collection("locations_master")
+                                    .orderBy("id", "asc")
+                                    .get();
 
-    if (snapshot.empty) {
-      console.error("地点マスターが空です。");
-      locationSelect.innerHTML = '<option value="">地点取得失敗</option>';
-      return;
-    }
+    if (snapshot.empty) {
+      console.error("地点マスターが空です。");
+      locationSelect.innerHTML = '<option value="">地点取得失敗</option>';
+      return;
+    }
 
-    // 3. 取得したデータでグローバル変数とプルダウンを生成
-    locations = []; // グローバル配列をリセット
-    locationSelect.innerHTML = '<option value="">地点を選択</option>'; // プルダウンをリセット
+    locations = [];
+    locationSelect.innerHTML = '<option value="">地点を選択</option>';
 
-    snapshot.forEach(doc => {
-      const loc = doc.data();
-      locations.push(loc); // グローバル配列に格納
+    snapshot.forEach(doc => {
+      const loc = doc.data();
+      locations.push(loc); 
 
-      // プルダウンに <option> を追加
-      const option = document.createElement('option');
-      option.value = loc.id;
-      option.textContent = loc.name;
-      locationSelect.appendChild(option);
-    });
-    
-    // 4. 保存されていた地点を復元
-    if (savedLocationId) {
-      locationSelect.value = savedLocationId;
-    }
+      const option = document.createElement('option');
+      option.value = loc.id;
+      option.textContent = loc.name;
+      locationSelect.appendChild(option);
+    });
+    
+    if (savedLocationId) {
+      locationSelect.value = savedLocationId;
+    }
 
-  } catch (err) {
-    console.error("地点マスターの読み込みに失敗しました:", err);
-    locationSelect.innerHTML = '<option value="">読込エラー</option>';
-  } finally {
-    // 5. 処理完了後、プルダウンを有効化
-    locationSelect.disabled = false;
-  }
+  } catch (err) {
+    console.error("地点マスターの読み込みに失敗しました:", err);
+    locationSelect.innerHTML = '<option value="">読込エラー</option>';
+  } finally {
+    locationSelect.disabled = false;
+  }
 }
 
 /**
- * アプリ（スキャナー画面）を開始する
- */
+ * アプリ（スキャナー画面）を開始する
+ */
 function startApp() {
-  staff = document.getElementById('staffName').value.trim();
-  const locationId = document.getElementById('location').value;
+  staff = document.getElementById('staffName').value.trim();
+  const locationId = document.getElementById('location').value;
 
-  if (!staff || !locationId) {
-    showCustomPopup({
-      title: "確認",
-      message: "担当者名と地点を入力・選択してください。",
-      buttons: [{ text: "OK", value: true }]
-    });
-    return;
-  }
-  
-  localStorage.setItem('staffName', staff);
-  selectedLocationId = locationId;
-  // 🚨 locations配列が非同期で設定された後で呼び出されるため、.findが安全に動作します
-  selectedLocationName = locations.find(loc => loc.id == locationId).name;
+  if (!staff || !locationId) {
+    showCustomPopup({
+      title: "確認",
+      message: "担当者名と地点を入力・選択してください。",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+  
+  localStorage.setItem('staffName', staff);
+  selectedLocationId = locationId;
+  selectedLocationName = locations.find(loc => loc.id == locationId).name;
 
-  localStorage.setItem('locationId', selectedLocationId);
-  localStorage.setItem('locationName', selectedLocationName); 
+  localStorage.setItem('locationId', selectedLocationId);
+  localStorage.setItem('locationName', selectedLocationName); 
 
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('reader').style.display = '';
-  document.getElementById('result').style.display = '';
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = '';
+  document.getElementById('result').style.display = '';
 
-  startScanner();
+  startScanner();
 }
 
 /**
- * QRコードスキャナーを開始する (修正版)
+ * ▼▼▼ 履歴を表示する関数 (新規追加) ▼▼▼
+ */
+async function showHistory() {
+  const staffInput = document.getElementById('staffName').value.trim();
+  if (!staffInput) {
+    showCustomPopup({
+      title: "確認",
+      message: "履歴を表示するには、担当者名を入力してください。",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+
+  // 画面切り替え
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('history-view').style.display = 'block';
+  document.getElementById('history-staff-display').textContent = staffInput;
+  
+  const listDiv = document.getElementById('history-list');
+  listDiv.innerHTML = 'データを取得中...';
+
+  try {
+    // 担当者名でフィルタリングして取得
+    const snapshot = await firestore.collection('scans')
+      .where('staff', '==', staffInput)
+      .get();
+
+    if (snapshot.empty) {
+      listDiv.innerHTML = '<p>読み取り履歴はありません。</p>';
+      return;
+    }
+
+    // JavaScript側で日付順（新しい順）にソート
+    // (Firestoreの複合インデックス設定の手間を避けるため)
+    let docs = snapshot.docs.map(doc => doc.data());
+    docs.sort((a, b) => {
+      // scanTimestampがあればそれを使う、なければ文字列のdate/timeで比較
+      const tA = a.scanTimestamp ? a.scanTimestamp.toMillis() : 0;
+      const tB = b.scanTimestamp ? b.scanTimestamp.toMillis() : 0;
+      return tB - tA; // 降順
+    });
+
+    // テーブル作成
+    let html = '<table class="history-table">';
+    html += '<tr><th>時間</th><th>地点</th><th>ゼッケン</th></tr>';
+    
+    docs.forEach(d => {
+      // 表示用の時刻（秒なし）
+      const displayTime = d.time ? d.time.substring(0, 5) : '--:--';
+      html += `<tr>
+        <td>${displayTime}</td>
+        <td>${d.name}</td>
+        <td>${d.bibNumber}</td>
+      </tr>`;
+    });
+    html += '</table>';
+    html += `<p style="text-align:right; font-size:14px;">件数: ${docs.length}件</p>`;
+
+    listDiv.innerHTML = html;
+
+  } catch (error) {
+    console.error("履歴取得エラー:", error);
+    listDiv.innerHTML = '<p style="color:red;">履歴の取得に失敗しました。<br>通信環境を確認してください。</p>';
+  }
+}
+
+/**
+ * ▼▼▼ 履歴画面を閉じる関数 (新規追加) ▼▼▼
+ */
+function closeHistory() {
+  document.getElementById('history-view').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+}
+
+/**
+ * QRコードスキャナーを開始する
  */
 function startScanner() {
   const video = document.getElementById('video');
@@ -242,7 +347,6 @@ function startScanner() {
   }
   document.getElementById('message').textContent = '読み取り中...';
 
-  // コールバック関数
   codeReader.decodeFromVideoDevice(undefined, video, (result, err) => { 
     if (result) {
       codeReader.reset();
@@ -251,9 +355,7 @@ function startScanner() {
       const text = result.text.trim();
       const parts = text.split('/');
       
-      // ▼▼▼ 変更箇所ここから ▼▼▼
       if (parts.length >= 4) {
-        // 5番目の startTime がない場合は空文字 ('') をセットする記述に変更
         const [division, bibNumber, runnerName, gender, startTime = ''] = parts;
         
         const scanTimeObject = new Date();
@@ -265,14 +367,13 @@ function startScanner() {
           bibNumber,
           runnerName,
           gender,
-          startTime, // ★ここに追加（保存データに含める）
+          startTime,
           scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
           date: scanTimeObject.toLocaleDateString('ja-JP'),
           time: scanTimeObject.toLocaleTimeString('ja-JP'),
           staff,
           serverTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
-      // ▲▲▲ 変更箇所ここまで ▲▲▲
 
         showPopup(scanData); 
       } else {
@@ -282,140 +383,139 @@ function startScanner() {
     }
   }, { video: { facingMode: "environment" } });
 }
+
 /**
- * 読み取り結果のポップアップを表示する
- */
+ * 読み取り結果のポップアップを表示する
+ */
 function showPopup(scanData) {
-  const overlay = document.getElementById('popup-overlay');
-  const title = document.getElementById('popup-title');
-  const info = document.getElementById('popup-info');
-  const popup = document.getElementById('popup');
+  const overlay = document.getElementById('popup-overlay');
+  const title = document.getElementById('popup-title');
+  const info = document.getElementById('popup-info');
+  const popup = document.getElementById('popup');
 
-  title.textContent = "チェックOK";
-  title.style.color = "green";
+  title.textContent = "チェックOK";
+  title.style.color = "green";
 
-  info.innerHTML = `
-    地点：${scanData.name}<br>
-    部門：${scanData.division}<br>
-    ゼッケン：${scanData.bibNumber}<br>
-    氏名：${scanData.runnerName}
-  `;
+  info.innerHTML = `
+    地点：${scanData.name}<br>
+    部門：${scanData.division}<br>
+    ゼッケン：${scanData.bibNumber}<br>
+    氏名：${scanData.runnerName}
+  `;
 
-  popup.querySelectorAll('button').forEach(btn => btn.remove());
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
 
-  const okBtn = document.createElement('button');
-  okBtn.textContent = "OK";
-  okBtn.onclick = () => {
-    uploadToFirebase(scanData); 
-    continueScan(); 
-  };
-  popup.appendChild(okBtn);
+  const okBtn = document.createElement('button');
+  okBtn.textContent = "OK";
+  okBtn.onclick = () => {
+    uploadToFirebase(scanData); 
+    continueScan(); 
+  };
+  popup.appendChild(okBtn);
 
-  const endBtn = document.createElement('button');
-  endBtn.textContent = "終了";
-  endBtn.onclick = endApp;
-  popup.appendChild(endBtn);
+  const endBtn = document.createElement('button');
+  endBtn.textContent = "終了";
+  endBtn.onclick = endApp;
+  popup.appendChild(endBtn);
 
-  overlay.style.display = 'flex';
+  overlay.style.display = 'flex';
 }
 
 /**
- * スキャンを続行する
- */
+ * スキャンを続行する
+ */
 function continueScan() {
-  document.getElementById('popup-overlay').style.display = 'none';
-  startScanner(); 
+  document.getElementById('popup-overlay').style.display = 'none';
+  startScanner(); 
 }
 
 /**
- * アプリを終了し、設定画面に戻る
- */
+ * アプリを終了し、設定画面に戻る
+ */
 function endApp() {
-  if (codeReader) {
-    codeReader.reset();
-  }
-  document.getElementById('popup-overlay').style.display = 'none';
-  document.getElementById('setup').style.display = '';
-  document.getElementById('reader').style.display = 'none';
-  document.getElementById('result').style.display = 'none';
+  if (codeReader) {
+    codeReader.reset();
+  }
+  document.getElementById('popup-overlay').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+  document.getElementById('reader').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
 }
 
 /**
- * 読み取りデータをFirebase Firestoreにアップロードする (重複チェックあり)
- */
+ * 読み取りデータをFirebase Firestoreにアップロードする
+ */
 async function uploadToFirebase(data) {
-  if (!firestore) {
-    console.error("Firestore is not initialized.");
-    document.getElementById('message').textContent = 'DB未接続エラー'; 
-    return;
-  }
+  if (!firestore) {
+    console.error("Firestore is not initialized.");
+    document.getElementById('message').textContent = 'DB未接続エラー'; 
+    return;
+  }
 
-  const docId = `${data.id}_${data.bibNumber}`;
-  const docRef = firestore.collection("scans").doc(docId);
+  const docId = `${data.id}_${data.bibNumber}`;
+  const docRef = firestore.collection("scans").doc(docId);
 
-  try {
-    await firestore.runTransaction(async (transaction) => {
-      const doc = await transaction.get(docRef);
-      if (doc.exists) {
-        throw new Error("already-exists");G
-      }
-      transaction.set(docRef, data);
-    });
-    console.log("Transaction successfully committed (初回):", docId);
-    document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
+  try {
+    await firestore.runTransaction(async (transaction) => {
+      const doc = await transaction.get(docRef);
+      if (doc.exists) {
+        throw new Error("already-exists");
+      }
+      transaction.set(docRef, data);
+    });
+    console.log("Transaction successfully committed (初回):", docId);
+    document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
 
-  } catch (error) {
-    if (error.message === "already-exists") {
-      console.warn("Transaction failed (重複スキャン):", docId);
-      document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
-    } else {
-      console.error("Transaction failed: ", error);
-      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
-    }
-  }
+  } catch (error) {
+    if (error.message === "already-exists") {
+      console.warn("Transaction failed (重複スキャン):", docId);
+      document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
+    } else {
+      console.error("Transaction failed: ", error);
+      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+    }
+  }
 }
 
 /**
- * 汎用的なカスタムポップアップ（エラー表示などに使用）
- */
+ * 汎用的なカスタムポップアップ
+ */
 function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
-  const overlay = document.getElementById('popup-overlay');
-  const popup = document.getElementById('popup');
-  const titleElem = document.getElementById('popup-title');
-  const infoElem = document.getElementById('popup-info');
+  const overlay = document.getElementById('popup-overlay');
+  const popup = document.getElementById('popup');
+  const titleElem = document.getElementById('popup-title');
+  const infoElem = document.getElementById('popup-info');
 
-  titleElem.textContent = title;
-  titleElem.style.color = (title === "エラー" ? "red" : ""); 
-  infoElem.innerHTML = message;
+  titleElem.textContent = title;
+  titleElem.style.color = (title === "エラー" ? "red" : ""); 
+  infoElem.innerHTML = message;
 
-  popup.querySelectorAll('button').forEach(btn => btn.remove());
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
 
-  buttons.forEach(({ text, value }) => {
-    const btn = document.createElement('button');
-    btn.textContent = text;
-    btn.onclick = () => {
-      overlay.style.display = 'none';
-      if (callback) callback(value);
-    };
-    popup.appendChild(btn);
-  });
+  buttons.forEach(({ text, value }) => {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.onclick = () => {
+      overlay.style.display = 'none';
+      if (callback) callback(value);
+    };
+    popup.appendChild(btn);
+  });
 
-  overlay.style.display = 'flex';
+  overlay.style.display = 'flex';
 }
 
-// ▼▼▼ 3. 最後に、初期化処理を実行（initializeAppLogicを呼び出す） ▼▼▼
+// ▼▼▼ 3. 初期化処理 ▼▼▼
 
 try {
   // Firebase初期化
   firebase.initializeApp(firebaseConfig);
   firestore = firebase.firestore();
 
-  // Firestore persistence を試す（失敗しても問題なし）
   firestore.enablePersistence().catch((err) => {
     console.warn("Persistence disabled:", err.code);
   });
 
-  // ★ Android では initializeAppLogic() の実行を少し遅らせると安定する
   setTimeout(() => {
     initializeAppLogic();
   }, 300);
@@ -423,7 +523,6 @@ try {
 } catch (e) {
   console.error("Firebase initialization error:", e);
   alert("データベースの初期化に失敗しました。");
-  // エラー時でも初期化は実行
   initializeAppLogic();
 }
 </script>
