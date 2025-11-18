@@ -519,9 +519,11 @@ function calculateElapsedTime(scanDateObj, startTimeStr) {
   if (startObj > scanDateObj) {
     startObj.setDate(startObj.getDate() - 1);
   }
+  // 注: 24時間以上のレースの場合、このロジックでは日付情報がないと正確な総時間は出ませんが、
+  // QRコードに日付がない以上、最も合理的な推定値（直近の該当時刻）を採用します。
 
   const diffMs = scanDateObj - startObj;
-  if (diffMs < 0) return "--:--"; 
+  if (diffMs < 0) return "--:--"; // 念のため
 
   const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
   const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -548,6 +550,7 @@ function updateReportView() {
   let filtered = allScanDataForReport.filter(d => d.division === selectedDiv);
 
   // ソート: 1. 地点ID順(降順=先に行っている順) 2. 経過時間(昇順=速い順)
+  // ※地点ID順は _locationIndex を利用
   filtered.sort((a, b) => {
     if (b._locationIndex !== a._locationIndex) {
       return b._locationIndex - a._locationIndex; // 進んでいる順
