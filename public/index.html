@@ -401,33 +401,27 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
 }
 
 // ▼▼▼ 3. 最後に、初期化処理を実行（initializeAppLogicを呼び出す） ▼▼▼
-try {
-  // Firebaseを初期化
-  firebase.initializeApp(firebaseConfig);
-  firestore = firebase.firestore();
 
-  // Firestoreのオフライン持続性を有効にする
-  firestore.enablePersistence()
-    .then(() => {
-      console.log("Firestore offline persistence enabled.");
-    })
-    .catch((err) => {
-      if (err.code == 'failed-precondition') {
-        console.warn("Firestore: Multiple tabs open, persistence can only be enabled in one.");
-      } else if (err.code == 'unimplemented') {
-        console.warn("Firestore: Persistence is not available in this browser.");
-      }
-    })
-    .finally(() => {
-      // 🚨 これで initializeAppLogic が定義された後に実行される
-      initializeAppLogic();
-    });
+try {
+  // Firebase初期化
+  firebase.initializeApp(firebaseConfig);
+  firestore = firebase.firestore();
+
+  // Firestore persistence を試す（失敗しても問題なし）
+  firestore.enablePersistence().catch((err) => {
+    console.warn("Persistence disabled:", err.code);
+  });
+
+  // ★ Android では initializeAppLogic() の実行を少し遅らせると安定する
+  setTimeout(() => {
+    initializeAppLogic();
+  }, 300);
 
 } catch (e) {
-  console.error("Firebase initialization error:", e);
-  alert("データベースの初期化に失敗しました。");
-  // 初期化失敗時も initializeAppLogic() を呼び出す
-  initializeAppLogic();
+  console.error("Firebase initialization error:", e);
+  alert("データベースの初期化に失敗しました。");
+  // エラー時でも初期化は実行
+  initializeAppLogic();
 }
 </script>
 </body>
