@@ -177,9 +177,10 @@ const locations = [
   {id:31, name:"飯盛経塚"}, {id:32, name:"有喜老人ホーム"}, {id:33, name:"唐比温泉センター"}, {id:34, name:"千々石"}
 ];
 
-window.onload = function() {
+// ▼▼▼ window.onload 関数全体をこの関数に置き換える ▼▼▼
+function initializeAppLogic() {
   const savedStaff = localStorage.getItem('staffName');
-  const savedLocationId = localStorage.getItem('locationId'); 
+  const savedLocationId = localStorage.getItem('locationId');
   
   if (savedStaff) document.getElementById('staffName').value = savedStaff;
 
@@ -194,7 +195,8 @@ window.onload = function() {
   if (savedLocationId) {
     locationSelect.value = savedLocationId;
   }
-};
+}
+// ▲▲▲ window.onload 関数全体をこの関数に置き換える ▲▲▲
 
 
 /**
@@ -228,18 +230,19 @@ function startApp() {
 }
 
 /**
- * QRコードスキャナーを開始する
+ * QRコードスキャナーを開始する (修正版)
  */
-function startScanner() {
+function startScanner() { // async を削除（カメラ起動のために必須）
   const video = document.getElementById('video');
   if (!codeReader) {
     codeReader = new ZXing.BrowserQRCodeReader();
   }
   document.getElementById('message').textContent = '読み取り中...';
 
-  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+  // コールバック関数も async を削除
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => { 
     if (result) {
-      codeReader.reset(); 
+      codeReader.reset();
       document.getElementById('message').textContent = '読み取り成功';
 
       const text = result.text.trim();
@@ -248,10 +251,8 @@ function startScanner() {
       if (parts.length >= 4) {
         const [division, bibNumber, runnerName, gender] = parts;
         
-        // ★★★ 変更点：読み取り時刻（端末時刻）を取得 ★★★
-        const scanTimeObject = new Date(); 
+        const scanTimeObject = new Date();
         
-        // 保存するデータオブジェクトを作成
         const scanData = {
           id: selectedLocationId,
           name: selectedLocationName,
@@ -259,23 +260,16 @@ function startScanner() {
           bibNumber,
           runnerName,
           gender,
-          
-          // ★ 読み取り時刻（端末時刻）をFirestoreのTimestampオブジェクトとして保存
-          // これが順位判定用の「実際の読み取り時刻」となります。
           scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
-
-          // 念のため、人間が読みやすい形式の文字列も保存
           date: scanTimeObject.toLocaleDateString('ja-JP'),
           time: scanTimeObject.toLocaleTimeString('ja-JP'),
-
           staff,
-
-          // ★ サーバー同期時刻（参考用・デバッグ用）
-          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp() 
+          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         // ポップアップにスキャンデータを渡す
-        showPopup(scanData);
+        // ここから処理が継続する
+        showPopup(scanData); 
 
       } else {
         document.getElementById('message').textContent = '無効なQRコードです';
