@@ -355,7 +355,7 @@ function closeHistory() {
 }
 
 /**
- * ▼▼▼ 通過情報（統計）を表示する関数 (新規追加) ▼▼▼
+ * ▼▼▼ 通過情報（統計）を表示する関数 (未通過数の計算修正版) ▼▼▼
  */
 async function showStats() {
   // 画面遷移
@@ -368,12 +368,11 @@ async function showStats() {
   listDiv.innerHTML = '全データを集計中...';
 
   try {
-    // 1. スキャンデータを全取得 (件数が多い場合は注意が必要ですが、今回は全量取得で実装)
+    // 1. スキャンデータを全取得
     const snapshot = await firestore.collection('scans').get();
     
     // 2. 地点IDごとにカウント
     const counts = {};
-    const retireCounts = {}; // リタイヤ地点のカウント用
     let totalRetire = 0; // 全リタイヤ数
 
     snapshot.forEach(doc => {
@@ -383,8 +382,6 @@ async function showStats() {
 
       // リタイヤ判定（地点名に「リタイヤ」が含まれるか）
       if (lname.includes("リタイヤ") || lname.includes("リタイア")) {
-        if (!retireCounts[lid]) retireCounts[lid] = 0;
-        retireCounts[lid]++;
         totalRetire++;
       } else {
         if (!counts[lid]) counts[lid] = 0;
@@ -393,7 +390,6 @@ async function showStats() {
     });
 
     // 3. 表示用テーブルの生成
-    // 地点マスタ(locations)は initializeAppLogic で取得済みで、ID順に並んでいます
     let html = '<table class="stats-table">';
     html += '<tr><th>地点</th><th>通過</th><th>未通過</th><th>リタイヤ</th></tr>';
 
@@ -413,21 +409,23 @@ async function showStats() {
 
       const passed = counts[loc.id] || 0;
       
-      // 未通過数の計算ロジック：
-      // 「前地点の通過者数(合計) + 前地点の未通過者数(合計) + リタイヤ者数(合計) - この地点の通過者数」
-      // 数学的には、前地点までの総和は常に「参加総数(totalRunners)」となります。
-      // したがって、未通過数 = 参加総数 - 現在地の通過数 となります。
-      const unpassed = totalRunners - passed;
+      // ▼▼▼ 修正箇所：未通過数からリタイヤ数を引く ▼▼▼
+      // 未通過 = 参加総数(スタート) - 現在地通過数 - リタイヤ総数
+      let unpassed = totalRunners - passed - totalRetire;
+      
+      // データ不整合などでマイナスになる場合は0にする
+      if (unpassed < 0) unpassed = 0;
 
       html += `<tr>
         <td style="text-align:left;">${loc.name}</td>
         <td style="font-weight:bold; color:blue;">${passed}</td>
         <td style="color:red;">${unpassed}</td>
-        <td>${totalRetire}</td> </tr>`;
+        <td>${totalRetire}</td>
+      </tr>`;
     });
 
     html += '</table>';
-    html += `<p style="text-align:right; font-size:14px; color:#666;">※未通過数はスタート通過数基準<br>※リタイヤは全地点の合計</p>`;
+    html += `<p style="text-align:right; font-size:14px; color:#666;">※未通過数 = スタート数 - 通過済 - リタイヤ</p>`;
 
     listDiv.innerHTML = html;
 
@@ -436,7 +434,7 @@ async function showStats() {
     listDiv.innerHTML = '<p style="color:red;">データの集計に失敗しました。<br>通信環境を確認してください。</p>';
   }
 }
-
+  
 /**
  * 通過情報画面を閉じる関数
  */
