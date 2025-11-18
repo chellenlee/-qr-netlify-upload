@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>橘湾岸ＱＲ2025秋</title>
+  <title>橘湾岸ＱＲ2025秋 (Firebase版)</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
@@ -28,6 +28,7 @@
       font-weight: bold;
       text-align: center;
     }
+    /* #history を削除 */
     #setup, #reader, #result { margin: 20px; }
     #setup input, #setup select {
       text-align: left;
@@ -42,6 +43,7 @@
       margin-top: 10px;
       object-fit: cover;
     }
+    /* table関連を削除 (history削除のため) */
     input, select, button { padding: 12px; font-size: 20px; margin: 8px; }
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
@@ -249,6 +251,7 @@ function startScanner() {
       const text = result.text.trim();
       const parts = text.split('/');
       
+      // 項目が4つ以上あるかチェック
       if (parts.length >= 4) {
         // -------------------------------------------------------
         // ★★★ 修正箇所：5番目の項目（スタート時間）の取得 ★★★
@@ -257,9 +260,9 @@ function startScanner() {
         const bibNumber = parts[1];
         const runnerName = parts[2];
         const gender = parts[3];
-        // 5番目があれば取得、なければ空文字にする
-        const runnerStartTime = parts[4] || "";
-        
+        // 5番目があれば取得、なければ空文字にする (安全な処理)
+        const runnerStartTime = parts[4] || ""; // 🚨 修正ロジック
+
         const scanTimeObject = new Date();
         
         const scanData = {
@@ -279,7 +282,7 @@ function startScanner() {
 
         showPopup(scanData); 
       } else {
-        document.getElementById('message').textContent = '無効なQRコードです';
+        document.getElementById('message').textContent = '無効なQRコードです（項目不足）';
         setTimeout(startScanner, 1000);
       }
     }
@@ -306,8 +309,8 @@ function showPopup(scanData) {
     氏名：${scanData.runnerName}<br>
   `;
 
-  // スタート時間がある場合のみ表示
-  if (scanData.runnerStartTime) {
+  // スタート時間がある場合のみ表示 (空文字もチェック)
+  if (scanData.runnerStartTime && scanData.runnerStartTime.trim() !== '') {
     infoHtml += `スタート時間：${scanData.runnerStartTime}<br>`;
   }
 
