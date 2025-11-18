@@ -128,37 +128,42 @@
 <script>
 // ▼▼▼ Firebaseの初期化（ここにご自身のFirebase設定を貼り付けます） ▼▼▼
 const firebaseConfig = {
-  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
-  authDomain: "tachibana-wangan.firebaseapp.com",
-  projectId: "tachibana-wangan",
-  storageBucket: "tachibana-wangan.firebasestorage.app",
-  messagingSenderId: "963128842192",
-  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
+  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
+  authDomain: "tachibana-wangan.firebaseapp.com",
+  projectId: "tachibana-wangan",
+  storageBucket: "tachibana-wangan.firebasestorage.app",
+  messagingSenderId: "963128842192",
+  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
 };
 
 let firestore;
 try {
-  // Firebaseを初期化
-  firebase.initializeApp(firebaseConfig);
-  firestore = firebase.firestore();
+  // Firebaseを初期化
+  firebase.initializeApp(firebaseConfig);
+  firestore = firebase.firestore();
 
-  // Firestoreのオフライン持続性を有効にする
-  firestore.enablePersistence()
-    .then(() => {
-      console.log("Firestore offline persistence enabled.");
-    })
-    .catch((err) => {
-      if (err.code == 'failed-precondition') {
-        // 複数のタブが開かれている場合など
-        console.warn("Firestore: Multiple tabs open, persistence can only be enabled in one.");
-      } else if (err.code == 'unimplemented') {
-        // ブラウザがサポートしていない場合
-        console.warn("Firestore: Persistence is not available in this browser.");
-      }
+  // Firestoreのオフライン持続性を有効にする
+  firestore.enablePersistence()
+    .then(() => {
+      console.log("Firestore offline persistence enabled.");
+    })
+    .catch((err) => {
+      if (err.code == 'failed-precondition') {
+        console.warn("Firestore: Multiple tabs open, persistence can only be enabled in one.");
+      } else if (err.code == 'unimplemented') {
+        console.warn("Firestore: Persistence is not available in this browser.");
+      }
+    })
+    // 修正： .finally() を追加し、initializeAppLogic() を呼び出す
+    .finally(() => {
+      initializeAppLogic();
     });
+
 } catch (e) {
-  console.error("Firebase initialization error:", e);
-  alert("データベースの初期化に失敗しました。");
+  console.error("Firebase initialization error:", e);
+  alert("データベースの初期化に失敗しました。");
+  // 修正：初期化失敗時も initializeAppLogic() を呼び出す
+  initializeAppLogic();
 }
 // ▲▲▲ Firebaseの初期化 ▲▲▲
 
