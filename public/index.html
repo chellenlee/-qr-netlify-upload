@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>橘湾岸ＱＲ2025秋 (Firebase版)</title>
+  <title>橘湾岸ＱＲ2025秋</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
@@ -19,7 +19,6 @@
   </script>
 
   <style>
-    /* ▼▼▼ デザイン（CSS）を完全に復元しました ▼▼▼ */
     body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; font-size: 18px; }
     #title-banner {
       background-color: #003366; /* 紺色背景 */
@@ -29,10 +28,8 @@
       font-weight: bold;
       text-align: center;
     }
-    /* レイアウト調整 */
-    #setup, #reader, #result, #history { margin: 20px; }
-    
-    /* 入力欄のデザイン */
+    /* #history を削除 */
+    #setup, #reader, #result { margin: 20px; }
     #setup input, #setup select {
       text-align: left;
       text-indent: 2em;
@@ -40,23 +37,16 @@
       margin-bottom: 10px;
       font-size: 20px;
     }
-    
-    /* 動画サイズ（元の比率に復元） */
     video {
       width: 90vw;
-      height: 65vh;               /* 90vwではなく65vhに戻しました */
+      height: 90vw;
       margin-top: 10px;
       object-fit: cover;
     }
-
-    /* テーブルデザイン（復元） */
-    table { width: 95%; margin: 10px auto; border-collapse: collapse; font-size: 18px; }
-    th, td { border: 1px solid #ccc; padding: 10px; font-size: 18px; }
-    
+    /* table関連を削除 (history削除のため) */
     input, select, button { padding: 12px; font-size: 20px; margin: 8px; }
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
-    /* ボタンのグラデーションと立体感（復元） */
     .save-button, .start-button {
       background: linear-gradient(#888888, #666666);
       color: white;
@@ -73,7 +63,6 @@
       transform: translateY(3px);
     }
 
-    /* ポップアップ関連 */
     #popup-overlay {
       position: fixed;
       top: 0; left: 0;
@@ -111,7 +100,7 @@
   </select>
   <br>
   <button class="start-button" onclick="startApp()">開始</button>
-</div>
+  </div>
 
 <div id="reader" style="display:none;">
   <h3 id="message">読み取り中...</h3>
@@ -124,23 +113,11 @@
   <div id="latest"></div>
 </div>
 
-<div id="history" style="display:none;">
-  <h3>読み取り履歴</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>地点ID</th><th>地点名</th><th>部門</th><th>ゼッケン</th><th>氏名</th><th>性別</th><th>日付</th><th>時刻</th><th>担当者</th>
-      </tr>
-    </thead>
-    <tbody id="historyTable"></tbody>
-  </table>
-</div>
-
 <div id="popup-overlay">
   <div id="popup">
     <h2 id="popup-title">チェックOK</h2>
     <p id="popup-info"></p>
-  </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -156,25 +133,296 @@ let selectedLocationId = '';
 let selectedLocationName = '';
 let codeReader = null;
 let locations = []; // 動的ロードのため空にする
-let scannedData = []; // 履歴データ用
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
-  authDomain: "tachibana-wangan.firebaseapp.com",
-  projectId: "tachibana-wangan",
-  storageBucket: "tachibana-wangan.firebasestorage.app",
-  messagingSenderId: "963128842192",
-  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
+  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
+  authDomain: "tachibana-wangan.firebaseapp.com",
+  projectId: "tachibana-wangan",
+  storageBucket: "tachibana-wangan.firebasestorage.app",
+  messagingSenderId: "963128842192",
+  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
 };
 
 // ▼▼▼ 2. すべての関数を先に定義 ▼▼▼
 
 /**
- * アプリの初期化ロジック（地点マスターをFirestoreから読み込む）
- */
+ * アプリの初期化ロジック（地点マスターをFirestoreから読み込む）
+ */
 async function initializeAppLogic() {
-  const savedStaff = localStorage.getItem('staffName');
-  const savedLocationId = localStorage.getItem('locationId');
-  const savedHistory = localStorage.getItem('history');
-  
-  if
+  const savedStaff = localStorage.getItem('staffName');
+  const savedLocationId = localStorage.getItem('locationId');
+  
+  if (savedStaff) document.getElementById('staffName').value = savedStaff;
+
+  const locationSelect = document.getElementById('location');
+  
+  // 1. 読み込み中の表示に変更
+  locationSelect.innerHTML = '<option value="">地点マスター読込中...</option>';
+  locationSelect.disabled = true;
+
+  try {
+    // 2. Firestoreの 'locations_master' から 'id' 順でデータを取得
+    const snapshot = await firestore.collection("locations_master")
+                                    .orderBy("id", "asc")
+                                    .get();
+
+    if (snapshot.empty) {
+      console.error("地点マスターが空です。");
+      locationSelect.innerHTML = '<option value="">地点取得失敗</option>';
+      return;
+    }
+
+    // 3. 取得したデータでグローバル変数とプルダウンを生成
+    locations = []; // グローバル配列をリセット
+    locationSelect.innerHTML = '<option value="">地点を選択</option>'; // プルダウンをリセット
+
+    snapshot.forEach(doc => {
+      const loc = doc.data();
+      locations.push(loc); // グローバル配列に格納
+
+      // プルダウンに <option> を追加
+      const option = document.createElement('option');
+      option.value = loc.id;
+      option.textContent = loc.name;
+      locationSelect.appendChild(option);
+    });
+    
+    // 4. 保存されていた地点を復元
+    if (savedLocationId) {
+      locationSelect.value = savedLocationId;
+    }
+
+  } catch (err) {
+    console.error("地点マスターの読み込みに失敗しました:", err);
+    locationSelect.innerHTML = '<option value="">読込エラー</option>';
+  } finally {
+    // 5. 処理完了後、プルダウンを有効化
+    locationSelect.disabled = false;
+  }
+}
+
+/**
+ * アプリ（スキャナー画面）を開始する
+ */
+function startApp() {
+  staff = document.getElementById('staffName').value.trim();
+  const locationId = document.getElementById('location').value;
+
+  if (!staff || !locationId) {
+    showCustomPopup({
+      title: "確認",
+      message: "担当者名と地点を入力・選択してください。",
+      buttons: [{ text: "OK", value: true }]
+    });
+    return;
+  }
+  
+  localStorage.setItem('staffName', staff);
+  selectedLocationId = locationId;
+  // 🚨 locations配列が非同期で設定された後で呼び出されるため、.findが安全に動作します
+  selectedLocationName = locations.find(loc => loc.id == locationId).name;
+
+  localStorage.setItem('locationId', selectedLocationId);
+  localStorage.setItem('locationName', selectedLocationName); 
+
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = '';
+  document.getElementById('result').style.display = '';
+
+  startScanner();
+}
+
+/**
+ * QRコードスキャナーを開始する (修正版)
+ */
+function startScanner() {
+  const video = document.getElementById('video');
+  if (!codeReader) {
+    codeReader = new ZXing.BrowserQRCodeReader();
+  }
+  document.getElementById('message').textContent = '読み取り中...';
+
+  // コールバック関数
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => { 
+    if (result) {
+      codeReader.reset();
+      document.getElementById('message').textContent = '読み取り成功';
+
+      const text = result.text.trim();
+      const parts = text.split('/');
+      
+      if (parts.length >= 4) {
+        const [division, bibNumber, runnerName, gender] = parts;
+        
+        const scanTimeObject = new Date();
+        
+        const scanData = {
+          id: selectedLocationId,
+          name: selectedLocationName,
+          division,
+          bibNumber,
+          runnerName,
+          gender,
+          scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
+          date: scanTimeObject.toLocaleDateString('ja-JP'),
+          time: scanTimeObject.toLocaleTimeString('ja-JP'),
+          staff,
+          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        showPopup(scanData); 
+      } else {
+        document.getElementById('message').textContent = '無効なQRコードです';
+        setTimeout(startScanner, 1000);
+      }
+    }
+  }, { video: { facingMode: "environment" } });
+}
+
+/**
+ * 読み取り結果のポップアップを表示する
+ */
+function showPopup(scanData) {
+  const overlay = document.getElementById('popup-overlay');
+  const title = document.getElementById('popup-title');
+  const info = document.getElementById('popup-info');
+  const popup = document.getElementById('popup');
+
+  title.textContent = "チェックOK";
+  title.style.color = "green";
+
+  info.innerHTML = `
+    地点：${scanData.name}<br>
+    部門：${scanData.division}<br>
+    ゼッケン：${scanData.bibNumber}<br>
+    氏名：${scanData.runnerName}
+  `;
+
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
+
+  const okBtn = document.createElement('button');
+  okBtn.textContent = "OK";
+  okBtn.onclick = () => {
+    uploadToFirebase(scanData); 
+    continueScan(); 
+  };
+  popup.appendChild(okBtn);
+
+  const endBtn = document.createElement('button');
+  endBtn.textContent = "終了";
+  endBtn.onclick = endApp;
+  popup.appendChild(endBtn);
+
+  overlay.style.display = 'flex';
+}
+
+/**
+ * スキャンを続行する
+ */
+function continueScan() {
+  document.getElementById('popup-overlay').style.display = 'none';
+  startScanner(); 
+}
+
+/**
+ * アプリを終了し、設定画面に戻る
+ */
+function endApp() {
+  if (codeReader) {
+    codeReader.reset();
+  }
+  document.getElementById('popup-overlay').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+  document.getElementById('reader').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
+}
+
+/**
+ * 読み取りデータをFirebase Firestoreにアップロードする (重複チェックあり)
+ */
+async function uploadToFirebase(data) {
+  if (!firestore) {
+    console.error("Firestore is not initialized.");
+    document.getElementById('message').textContent = 'DB未接続エラー'; 
+    return;
+  }
+
+  const docId = `${data.id}_${data.bibNumber}`;
+  const docRef = firestore.collection("scans").doc(docId);
+
+  try {
+    await firestore.runTransaction(async (transaction) => {
+      const doc = await transaction.get(docRef);
+      if (doc.exists) {
+        throw new Error("already-exists");G
+      }
+      transaction.set(docRef, data);
+    });
+    console.log("Transaction successfully committed (初回):", docId);
+    document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
+
+  } catch (error) {
+    if (error.message === "already-exists") {
+      console.warn("Transaction failed (重複スキャン):", docId);
+      document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
+    } else {
+      console.error("Transaction failed: ", error);
+      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+    }
+  }
+}
+
+/**
+ * 汎用的なカスタムポップアップ（エラー表示などに使用）
+ */
+function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
+  const overlay = document.getElementById('popup-overlay');
+  const popup = document.getElementById('popup');
+  const titleElem = document.getElementById('popup-title');
+  const infoElem = document.getElementById('popup-info');
+
+  titleElem.textContent = title;
+  titleElem.style.color = (title === "エラー" ? "red" : ""); 
+  infoElem.innerHTML = message;
+
+  popup.querySelectorAll('button').forEach(btn => btn.remove());
+
+  buttons.forEach(({ text, value }) => {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.onclick = () => {
+      overlay.style.display = 'none';
+      if (callback) callback(value);
+    };
+    popup.appendChild(btn);
+  });
+
+  overlay.style.display = 'flex';
+}
+
+// ▼▼▼ 3. 最後に、初期化処理を実行（initializeAppLogicを呼び出す） ▼▼▼
+
+try {
+  // Firebase初期化
+  firebase.initializeApp(firebaseConfig);
+  firestore = firebase.firestore();
+
+  // Firestore persistence を試す（失敗しても問題なし）
+  firestore.enablePersistence().catch((err) => {
+    console.warn("Persistence disabled:", err.code);
+  });
+
+  // ★ Android では initializeAppLogic() の実行を少し遅らせると安定する
+  setTimeout(() => {
+    initializeAppLogic();
+  }, 300);
+
+} catch (e) {
+  console.error("Firebase initialization error:", e);
+  alert("データベースの初期化に失敗しました。");
+  // エラー時でも初期化は実行
+  initializeAppLogic();
+}
+</script>
+</body>
+</html>
