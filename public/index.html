@@ -359,18 +359,36 @@ function uploadToFirebase(data) {
   // ドキュメントIDを「地点ID_ゼッケン」にする
   const docId = `${data.id}_${data.bibNumber}`;
 
-  // 'scans' コレクションにドキュメントIDを指定してセット（上書き）
-  // data オブジェクトには scanTimestamp (端末時刻) が含まれている
-  firestore.collection("scans").doc(docId).set(data)
+  // ★★★ 変更点 ★★★
+  // .set() (上書き) から .create() (新規作成のみ) に変更します。
+  // これにより、docIdが既に存在する場合はエラーが発生します。
+  firestore.collection("scans").doc(docId).create(data)
     .then(() => {
-      console.log("Document successfully written (or cached):", docId);
+      // ------------------------------------
+      // 成功時 (＝初回スキャン時のみ)
+      // ------------------------------------
+      console.log("Document successfully CREATED (初回):", docId);
       document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
     })
     .catch((error) => {
-      console.error("Error writing document: ", error);
-      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+      // ------------------------------------
+      // エラー時
+      // ------------------------------------
+      
+      // ★★★ 変更点 ★★★
+      // エラーコードを判別し、それが「重複」によるものかをチェック
+      if (error.code === 'already-exists') {
+        // これが「重複スキャン」の場合です
+        console.warn("Document already exists (重複スキャン):", docId);
+        document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
+      } else {
+        // オフラインが解除された時の書き込み失敗など、その他のエラー
+        console.error("Error writing document: ", error);
+        document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+      }
     });
 }
+
 
 /**
  * 汎用的なカスタムポップアップ（エラー表示などに使用）
