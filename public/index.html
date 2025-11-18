@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>橘湾岸ＱＲ2025秋</title>
+  <title>橘湾岸ＱＲ2025春 (Firebase版)</title>
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
@@ -17,32 +17,6 @@
       });
     }
   </script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-
-  <script>
-  const firebaseConfig = {
-   apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
-   authDomain: "tachibana-wangan.firebaseapp.com",
-   projectId: "tachibana-wangan",
-   storageBucket: "tachibana-wangan.firebasestorage.app",
-   messagingSenderId: "963128842192",
-   appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
-  };
-
-  // Firebaseの初期化
-  const app = firebase.initializeApp(firebaseConfig);
-  // Firestoreの取得
-  const db = firebase.firestore();
-  db.enablePersistence()
-    .catch((err) => {
-      if (err.code == 'failed-precondition') {
-        console.warn("Firestore: Persistence failed (Multiple tabs open).", err);
-      } else if (err.code == 'unimplemented') {
-        console.warn("Firestore: Persistence failed (Browser not supported).", err);
-      }
-    });
-  </script>
 
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; font-size: 18px; }
@@ -54,22 +28,22 @@
       font-weight: bold;
       text-align: center;
     }
-    #setup, #reader, #result, #history { margin: 20px; }
+    /* #history を削除 */
+    #setup, #reader, #result { margin: 20px; }
     #setup input, #setup select {
       text-align: left;
       text-indent: 2em;
       width: 80%;
       margin-bottom: 10px;
-      font-size: 20px;  /* 入力フィールドと選択肢のフォントサイズを20px */
+      font-size: 20px;
     }
     video {
       width: 90vw;
-      height: 65vh;               /* 65%に変更 */
+      height: 65vh;
       margin-top: 10px;
-      object-fit: cover;          /* 強制フィット */
+      object-fit: cover;
     }
-    table { width: 95%; margin: 10px auto; border-collapse: collapse; font-size: 18px; }
-    th, td { border: 1px solid #ccc; padding: 10px; font-size: 18px; }
+    /* table関連を削除 (history削除のため) */
     input, select, button { padding: 12px; font-size: 20px; margin: 8px; }
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
@@ -107,19 +81,9 @@
       width: 80%;
       max-width: 400px;
     }
-    #popup h2 {
-      margin-top: 0;
-      font-size: 24px;
-    }
-    #popup p {
-      margin: 5px 0;
-      font-size: 20px;
-    }
-    #popup button {
-      padding: 10px 20px;
-      margin: 10px;
-      font-size: 20px;
-    }
+    #popup h2 { margin-top: 0; font-size: 24px; }
+    #popup p { margin: 5px 0; font-size: 20px; }
+    #popup button { padding: 10px 20px; margin: 10px; font-size: 20px; }
   </style>
 </head>
 
@@ -135,48 +99,73 @@
     <option value="">地点を選択</option>
   </select>
   <br>
-  <button class="start-button" onclick="confirmChange()">開始/変更</button>
-  <!-- 保存ボタンを追加 -->
-</div>
+  <button class="start-button" onclick="startApp()">開始</button>
+  </div>
 
 <div id="reader" style="display:none;">
   <h3 id="message">読み取り中...</h3>
   <video id="video" playsinline></video>
   <br>
-
-  <!-- 右下に終了ボタンを追加 -->
   <button class="save-button" onclick="endApp()">終了</button>
 </div>
 
-<div id="history" style="display:none;">
-  <h3>読み取り履歴</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>地点ID</th><th>地点名</th><th>部門</th><th>ゼッケン</th><th>氏名</th><th>性別</th><th>日付</th><th>時刻</th><th>担当者</th>
-      </tr>
-    </thead>
-    <tbody id="historyTable"></tbody>
-  </table>
+<div id="result" style="display:none;">
+  <div id="latest"></div>
 </div>
 
 <div id="popup-overlay">
   <div id="popup">
     <h2 id="popup-title">チェックOK</h2>
     <p id="popup-info"></p>
-    <button onclick="continueScan()">OK</button>
-    <button onclick="endApp()">終了</button>
-  </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/@zxing/library@latest"></script>
+
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
 <script>
+// ▼▼▼ Firebaseの初期化（ここにご自身のFirebase設定を貼り付けます） ▼▼▼
+const firebaseConfig = {
+  apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
+  authDomain: "tachibana-wangan.firebaseapp.com",
+  projectId: "tachibana-wangan",
+  storageBucket: "tachibana-wangan.firebasestorage.app",
+  messagingSenderId: "963128842192",
+  appId: "1:963128842192:web:5ee0eb05d3df5e7c63cbd5"
+};
+
+let firestore;
+try {
+  // Firebaseを初期化
+  firebase.initializeApp(firebaseConfig);
+  firestore = firebase.firestore();
+
+  // Firestoreのオフライン持続性を有効にする
+  firestore.enablePersistence()
+    .then(() => {
+      console.log("Firestore offline persistence enabled.");
+    })
+    .catch((err) => {
+      if (err.code == 'failed-precondition') {
+        // 複数のタブが開かれている場合など
+        console.warn("Firestore: Multiple tabs open, persistence can only be enabled in one.");
+      } else if (err.code == 'unimplemented') {
+        // ブラウザがサポートしていない場合
+        console.warn("Firestore: Persistence is not available in this browser.");
+      }
+    });
+} catch (e) {
+  console.error("Firebase initialization error:", e);
+  alert("データベースの初期化に失敗しました。");
+}
+// ▲▲▲ Firebaseの初期化 ▲▲▲
+
 let staff = '';
 let selectedLocationId = '';
 let selectedLocationName = '';
-let scannedData = [];
 let codeReader = null;
-let currentScan = {};
 
 const locations = [
   {id:1, name:"【受付】"}, {id:2, name:"【スタート】"}, {id:3, name:"【ゴール】"}, {id:4, name:"【Lダッシュ】"}, {id:5, name:"【リタイヤ】"},
@@ -190,9 +179,9 @@ const locations = [
 
 window.onload = function() {
   const savedStaff = localStorage.getItem('staffName');
-  const savedHistory = localStorage.getItem('history');
+  const savedLocationId = localStorage.getItem('locationId'); 
+  
   if (savedStaff) document.getElementById('staffName').value = savedStaff;
-  if (savedHistory) scannedData = JSON.parse(savedHistory);
 
   const locationSelect = document.getElementById('location');
   locations.forEach(loc => {
@@ -201,13 +190,21 @@ window.onload = function() {
     option.textContent = loc.name;
     locationSelect.appendChild(option);
   });
+  
+  if (savedLocationId) {
+    locationSelect.value = savedLocationId;
+  }
 };
 
-function confirmChange() {
-  const newLocationId = document.getElementById('location').value;
-  const staffName = document.getElementById('staffName').value.trim();
 
-  if (!staffName || !newLocationId) {
+/**
+ * アプリ（スキャナー画面）を開始する
+ */
+function startApp() {
+  staff = document.getElementById('staffName').value.trim();
+  const locationId = document.getElementById('location').value;
+
+  if (!staff || !locationId) {
     showCustomPopup({
       title: "確認",
       message: "担当者名と地点を入力・選択してください。",
@@ -215,184 +212,169 @@ function confirmChange() {
     });
     return;
   }
-
-  if (selectedLocationId !== newLocationId && scannedData.length > 0) {
-    showCustomPopup({
-      title: "確認",
-      message: "地点が変更されました。<br>現在の履歴をクリアしますか？", // メッセージを簡略化
-      buttons: [
-        { text: "クリアして続行", value: true }, // ボタン名を明確化
-        { text: "キャンセル", value: false }
-      ],
-      callback: (result) => {
-if (!result) {
-  return;
-}
-        scannedData = [];
-        localStorage.setItem('history', JSON.stringify(scannedData));
-        updateHistory();
-        startApp();
-      }
-    });
-  } else {
-    startApp();
-  }
-}
-
-function startApp() {
-  staff = document.getElementById('staffName').value.trim();
-  const locationId = document.getElementById('location').value;
-if (!staff || !locationId) {
-  showCustomPopup({
-    title: "確認",
-    message: "担当者名と地点を入力・選択してください。",
-    buttons: [{ text: "OK", value: true }]
-  });
-  return;
-}
+  
   localStorage.setItem('staffName', staff);
   selectedLocationId = locationId;
   selectedLocationName = locations.find(loc => loc.id == locationId).name;
 
+  localStorage.setItem('locationId', selectedLocationId);
+  localStorage.setItem('locationName', selectedLocationName); 
+
   document.getElementById('setup').style.display = 'none';
   document.getElementById('reader').style.display = '';
   document.getElementById('result').style.display = '';
-  document.getElementById('history').style.display = '';
 
   startScanner();
 }
 
-// startScanner() 関数
-
+/**
+ * QRコードスキャナーを開始する
+ */
 function startScanner() {
-  const video = document.getElementById('video');
-  codeReader = new ZXing.BrowserQRCodeReader();
+  const video = document.getElementById('video');
+  if (!codeReader) {
+    codeReader = new ZXing.BrowserQRCodeReader();
+  }
+  document.getElementById('message').textContent = '読み取り中...';
 
-  codeReader.decodeFromVideoDevice(undefined, video, async (result, err) => {
-    if (result) {
-      const text = result.text.trim();
-      const parts = text.split('/');
-      
-      if (parts.length >= 4) {
-        const [division, bibNumber, runnerName, gender] = parts;
-        currentScan = { division, bibNumber, runnerName, gender };
-        
-        const now = new Date();
-        const date = now.toLocaleDateString('ja-JP');
-        const time = now.toLocaleTimeString('ja-JP');
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => {
+    if (result) {
+      codeReader.reset(); 
+      document.getElementById('message').textContent = '読み取り成功';
 
-        // 新しいスキャンデータを作成
-        const newScanEntry = {
-          id: selectedLocationId,
-          name: selectedLocationName,
-          division,
-          bibNumber,
-          runnerName,
-          gender,
-          date,
-          time,
-          staff,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp() // サーバー時刻を記録
-        };
-            
-        // ローカル履歴（scannedData）に追加（画面表示用、重複チェックはFirestoreに任せる）
-        scannedData.push(newScanEntry);
-        localStorage.setItem('history', JSON.stringify(scannedData));
-        updateHistory();
+      const text = result.text.trim();
+      const parts = text.split('/');
+      
+      if (parts.length >= 4) {
+        const [division, bibNumber, runnerName, gender] = parts;
         
-        // ここでFirestoreのチェックと保存を呼び出す
-        await checkAndUploadToFirebase(newScanEntry);
-        
-        codeReader.reset();
-      }
-    }
-  }, { video: { facingMode: "environment" } });
+        // ★★★ 変更点：読み取り時刻（端末時刻）を取得 ★★★
+        const scanTimeObject = new Date(); 
+        
+        // 保存するデータオブジェクトを作成
+        const scanData = {
+          id: selectedLocationId,
+          name: selectedLocationName,
+          division,
+          bibNumber,
+          runnerName,
+          gender,
+          
+          // ★ 読み取り時刻（端末時刻）をFirestoreのTimestampオブジェクトとして保存
+          // これが順位判定用の「実際の読み取り時刻」となります。
+          scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
+
+          // 念のため、人間が読みやすい形式の文字列も保存
+          date: scanTimeObject.toLocaleDateString('ja-JP'),
+          time: scanTimeObject.toLocaleTimeString('ja-JP'),
+
+          staff,
+
+          // ★ サーバー同期時刻（参考用・デバッグ用）
+          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp() 
+        };
+
+        // ポップアップにスキャンデータを渡す
+        showPopup(scanData);
+
+      } else {
+        document.getElementById('message').textContent = '無効なQRコードです';
+        setTimeout(startScanner, 1000);
+      }
+    }
+  }, { video: { facingMode: "environment" } });
 }
 
-function showPopup(success) {
+/**
+ * 読み取り結果のポップアップを表示する
+ * @param {object} scanData - 読み取ったデータオブジェクト
+ */
+function showPopup(scanData) {
   const overlay = document.getElementById('popup-overlay');
   const title = document.getElementById('popup-title');
   const info = document.getElementById('popup-info');
   const popup = document.getElementById('popup');
 
-  title.textContent = success ? "チェックOK" : "読み取り済みです";
-  title.style.color = success ? "green" : "red";
+  title.textContent = "チェックOK";
+  title.style.color = "green";
 
   info.innerHTML = `
-    地点：${selectedLocationName}<br>
-    部門：${currentScan.division}<br>
-    ゼッケン：${currentScan.bibNumber}<br>
-    氏名：${currentScan.runnerName}
+    地点：${scanData.name}<br>
+    部門：${scanData.division}<br>
+    ゼッケン：${scanData.bibNumber}<br>
+    氏名：${scanData.runnerName}
   `;
 
   popup.querySelectorAll('button').forEach(btn => btn.remove());
 
   const okBtn = document.createElement('button');
   okBtn.textContent = "OK";
-  okBtn.onclick = continueScan;
+  okBtn.onclick = () => {
+    uploadToFirebase(scanData); 
+    continueScan(); 
+  };
   popup.appendChild(okBtn);
+
+  const endBtn = document.createElement('button');
+  endBtn.textContent = "終了";
+  endBtn.onclick = endApp;
+  popup.appendChild(endBtn);
 
   overlay.style.display = 'flex';
 }
 
+/**
+ * スキャンを続行する（ポップアップを閉じてスキャナーを再起動）
+ */
 function continueScan() {
   document.getElementById('popup-overlay').style.display = 'none';
-  startScanner();
+  startScanner(); 
 }
 
+/**
+ * アプリを終了し、設定画面に戻る
+ */
 function endApp() {
+  if (codeReader) {
+    codeReader.reset();
+  }
   document.getElementById('popup-overlay').style.display = 'none';
   document.getElementById('setup').style.display = '';
   document.getElementById('reader').style.display = 'none';
   document.getElementById('result').style.display = 'none';
-  document.getElementById('history').style.display = 'none';
 }
 
-function updateHistory() {
-  const tbody = document.getElementById('historyTable');
-  tbody.innerHTML = '';
-  scannedData.forEach(data => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${data.id}</td><td>${data.name}</td><td>${data.division}</td><td>${data.bibNumber}</td><td>${data.runnerName}</td><td>${data.gender}</td><td>${data.date}</td><td>${data.time}</td><td>${data.staff}</td>`;
-    tbody.appendChild(tr);
-  });
+
+/**
+ * 読み取りデータをFirebase Firestoreにアップロードする
+ * @param {object} data - アップロードするスキャンデータ
+ */
+function uploadToFirebase(data) {
+  if (!firestore) {
+    console.error("Firestore is not initialized.");
+    document.getElementById('message').textContent = 'DB未接続エラー'; 
+    return;
+  }
+
+  // ドキュメントIDを「地点ID_ゼッケン」にする
+  const docId = `${data.id}_${data.bibNumber}`;
+
+  // 'scans' コレクションにドキュメントIDを指定してセット（上書き）
+  // data オブジェクトには scanTimestamp (端末時刻) が含まれている
+  firestore.collection("scans").doc(docId).set(data)
+    .then(() => {
+      console.log("Document successfully written (or cached):", docId);
+      document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
+    })
+    .catch((error) => {
+      console.error("Error writing document: ", error);
+      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+    });
 }
 
-// 【重要】既存の autoUploadToFirebase 関数を削除し、以下の関数に置き換えてください。
-async function checkAndUploadToFirebase(scanEntry) {
-  // Firestore クエリを作成して重複をチェック
-  const querySnapshot = await db.collection("qr_entries")
-    .where('id', '==', scanEntry.id)           // 1. 同じ地点ID
-    .where('division', '==', scanEntry.division) // 2. 同じ部門
-    .where('bibNumber', '==', scanEntry.bibNumber) // 3. 同じゼッケン
-    .get();
-    
-  // 読み取り済みフラグ
-  const alreadyScanned = querySnapshot.docs.length > 0;
-
-  if (alreadyScanned) {
-    // 重複が見つかった場合
-    showPopup(false); // 読み取り済みポップアップ
-    console.warn("Duplicate scan rejected by Firestore check:", scanEntry.bibNumber);
-    return; // 保存を中断
-  }
-
-  // 重複がなければ保存を実行
-  try {
-    const docRef = await db.collection("qr_entries").add(scanEntry);
-    
-    showPopup(true); // チェックOKポップアップ
-    console.log("Firestore Auto Uploaded:", docRef.id);
-
-  } catch (err) {
-    // オフラインの場合、エラーにはなるがFirestoreのキューに自動的に入る
-    showPopup(true); // ユーザーには「OK」と表示し、裏で保存を試み続ける
-    console.error("Error during auto-upload (may be offline/permission denied):", err);
-  }
-}
-</script>
-
-<script>
+/**
+ * 汎用的なカスタムポップアップ（エラー表示などに使用）
+ */
 function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
   const overlay = document.getElementById('popup-overlay');
   const popup = document.getElementById('popup');
@@ -400,7 +382,7 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
   const infoElem = document.getElementById('popup-info');
 
   titleElem.textContent = title;
-  titleElem.style.color = "";
+  titleElem.style.color = (title === "エラー" ? "red" : ""); 
   infoElem.innerHTML = message;
 
   popup.querySelectorAll('button').forEach(btn => btn.remove());
@@ -418,5 +400,6 @@ function showCustomPopup({ title = "", message = "", buttons = [], callback = nu
   overlay.style.display = 'flex';
 }
 </script>
+
 </body>
 </html>
