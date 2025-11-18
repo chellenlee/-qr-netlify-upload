@@ -311,7 +311,7 @@ async function showHistory() {
     html += '<tr><th>地点</th><th>部門</th><th>No.</th><th>氏名</th><th>時間</th></tr>';
     
     docs.forEach(d => {
-      const displayTime = d.time ? d.time.substring(0, 5) : '--:--';
+      const displayTime = d.time || '--:--:--';
       html += `<tr>
         <td style="text-align:left;">${d.name}</td>
         <td>${d.division}</td>
