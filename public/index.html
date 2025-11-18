@@ -344,12 +344,11 @@ function endApp() {
   document.getElementById('result').style.display = 'none';
 }
 
-
 /**
- * 読み取りデータをFirebase Firestoreにアップロードする
+ * 読み取りデータをFirebase Firestoreにアップロードする (重複チェックあり)
  * @param {object} data - アップロードするスキャンデータ
  */
-function uploadToFirebase(data) {
+async function uploadToFirebase(data) { // async を追加
   if (!firestore) {
     console.error("Firestore is not initialized.");
     document.getElementById('message').textContent = 'DB未接続エラー'; 
@@ -358,36 +357,52 @@ function uploadToFirebase(data) {
 
   // ドキュメントIDを「地点ID_ゼッケン」にする
   const docId = `${data.id}_${data.bibNumber}`;
+  // ドキュメントの参照を先に取得
+  const docRef = firestore.collection("scans").doc(docId);
 
-  // ★★★ 変更点 ★★★
-  // .set() (上書き) から .create() (新規作成のみ) に変更します。
-  // これにより、docIdが既に存在する場合はエラーが発生します。
-  firestore.collection("scans").doc(docId).create(data)
-    .then(() => {
-      // ------------------------------------
-      // 成功時 (＝初回スキャン時のみ)
-      // ------------------------------------
-      console.log("Document successfully CREATED (初回):", docId);
-      document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
-    })
-    .catch((error) => {
-      // ------------------------------------
-      // エラー時
-      // ------------------------------------
+  try {
+    // ★★★ 変更点：トランザクションを使用 ★★★
+    // これにより「読み取り→書き込み」を安全に行えます
+    await firestore.runTransaction(async (transaction) => {
       
-      // ★★★ 変更点 ★★★
-      // エラーコードを判別し、それが「重複」によるものかをチェック
-      if (error.code === 'already-exists') {
-        // これが「重複スキャン」の場合です
-        console.warn("Document already exists (重複スキャン):", docId);
-        document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
-      } else {
-        // オフラインが解除された時の書き込み失敗など、その他のエラー
-        console.error("Error writing document: ", error);
-        document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+      // 1. まずドキュメントを読み取る
+      const doc = await transaction.get(docRef);
+
+      if (doc.exists) {
+        // 2. ★ ドキュメントが既に存在する場合 (重複スキャン)
+        // カスタムエラーをスローしてトランザクションを失敗させる
+        throw new Error("already-exists"); 
       }
+
+      // 3. ★ ドキュメントが存在しない場合 (初回スキャン)
+      // データをセット (新規作成)
+      transaction.set(docRef, data);
     });
+
+    // ------------------------------------
+    // トランザクション成功時 (＝初回スキャン時のみ)
+    // ------------------------------------
+    console.log("Transaction successfully committed (初回):", docId);
+    document.getElementById('message').textContent = `${data.bibNumber} 保存完了`;
+
+  } catch (error) {
+    // ------------------------------------
+    // トランザクション失敗時
+    // ------------------------------------
+    
+    // 4. スローされたエラーをここでキャッチ
+    if (error.message === "already-exists") {
+      // これが「重複スキャン」の場合
+      console.warn("Transaction failed (重複スキャン):", docId);
+      document.getElementById('message').textContent = `${data.bibNumber} は読み取り済み`;
+    } else {
+      // オフラインや権限エラーなど、その他のエラー
+      console.error("Transaction failed: ", error);
+      document.getElementById('message').textContent = `保存エラー(キャッシュ試行)`;
+    }
+  }
 }
+
 
 
 /**
