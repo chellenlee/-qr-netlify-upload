@@ -131,7 +131,7 @@
   <br>
   <button class="start-button" onclick="startApp()">開始</button>
   <br>
-  <button class="history-button" onclick="showHistory()">履歴を確認</button>
+  <button class="history-button" onclick="showHistory()">履歴確認</button>
 </div>
 
 <div id="history-view" style="display:none;">
@@ -147,6 +147,7 @@
   <video id="video" playsinline></video>
   <br>
   <button class="save-button" onclick="endApp()">終了</button>
+  <button class="history-button" onclick="showHistory()">履歴確認</button>
 </div>
 
 <div id="result" style="display:none;">
@@ -266,7 +267,7 @@ function startApp() {
 }
 
 /**
- * ▼▼▼ 履歴を表示する関数 (レイアウト調整版) ▼▼▼
+ * ▼▼▼ 履歴を表示する関数 (カメラ停止・画面制御追加版) ▼▼▼
  */
 async function showHistory() {
   const staffInput = document.getElementById('staffName').value.trim();
@@ -279,8 +280,17 @@ async function showHistory() {
     return;
   }
 
-  // 画面切り替え
+  // ★変更点1: カメラが起動中なら停止する（バッテリー節約・エラー防止）
+  if (codeReader) {
+    codeReader.reset();
+  }
+
+  // ★変更点2: どの画面から呼ばれてもいいように、全ての画面を非表示にする
   document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = 'none'; // readerも消す
+  document.getElementById('result').style.display = 'none';
+
+  // 履歴画面を表示
   document.getElementById('history-view').style.display = 'block';
   document.getElementById('history-staff-display').textContent = staffInput;
   
@@ -306,12 +316,14 @@ async function showHistory() {
       return tB - tA; // 降順
     });
 
-    // ▼▼▼ テーブルヘッダーと内容を更新（地点・部門・ゼッケン・氏名・時間） ▼▼▼
+    // テーブルヘッダーと内容（地点・部門・ゼッケン・氏名・時間）
     let html = '<table class="history-table">';
     html += '<tr><th>地点</th><th>部門</th><th>No.</th><th>氏名</th><th>時間</th></tr>';
     
     docs.forEach(d => {
+      // 秒まで表示
       const displayTime = d.time || '--:--:--';
+      
       html += `<tr>
         <td style="text-align:left;">${d.name}</td>
         <td>${d.division}</td>
@@ -330,7 +342,6 @@ async function showHistory() {
     listDiv.innerHTML = '<p style="color:red;">履歴の取得に失敗しました。<br>通信環境を確認してください。</p>';
   }
 }
-
 /**
  * ▼▼▼ 履歴画面を閉じる関数 (新規追加) ▼▼▼
  */
