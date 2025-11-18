@@ -171,37 +171,62 @@ let staff = '';
 let selectedLocationId = '';
 let selectedLocationName = '';
 let codeReader = null;
-
-// 既存の const locations = [...] は削除し、以下のデータに置き換えてください。
-const LOCATIONS_MASTER_DATA = [
-  {id:1, name:"【受付】"}, {id:2, name:"【スタート】"}, {id:3, name:"【ゴール】"}, {id:4, name:"【Lダッシュ】"}, {id:5, name:"【リタイヤ】"},
-  {id:6, name:"城山台"}, {id:7, name:"日並"}, {id:8, name:"鳴見ダム"}, {id:9, name:"あぐりの丘"}, {id:10, name:"福田霊園"},
-  {id:11, name:"女神大橋"}, {id:12, name:"江川交差点"}, {id:13, name:"伊王島大橋（往路到着）"}, {id:14, name:"伊王島灯台"}, {id:15, name:"伊王島大橋（復路出発）"},
-  {id:16, name:"大籠"}, {id:17, name:"以下宿"}, {id:18, name:"恐竜体育館"}, {id:19, name:"権現山公園"}, {id:20, name:"樺島公民館（往路到着）"},
-  {id:21, name:"樺島灯台"}, {id:22, name:"樺島公民館（復路出発）"}, {id:23, name:"自転車道入口"}, {id:24, name:"川原公民館"}, {id:25, name:"茂木ぶらぶら"},
-  {id:26, name:"女神大橋（M）"}, {id:27, name:"鍋冠山（M）"}, {id:28, name:"茂木支所（M）"}, {id:29, name:"日見公園"}, {id:30, name:"飯盛峠とんの山"},
-  {id:31, name:"飯盛経塚"}, {id:32, name:"有喜老人ホーム"}, {id:33, name:"唐比温泉センター"}, {id:34, name:"千々石"}
-];
-// ▼▼▼ window.onload 関数全体をこの関数に置き換える ▼▼▼
-function initializeAppLogic() {
-  const savedStaff = localStorage.getItem('staffName');
-  const savedLocationId = localStorage.getItem('locationId');
+let locations = [];
   
-  if (savedStaff) document.getElementById('staffName').value = savedStaff;
+// ▼▼▼ initializeAppLogic 関数を async に変更し、Firestoreから読み込む ▼▼▼
+async function initializeAppLogic() {
+  const savedStaff = localStorage.getItem('staffName');
+  const savedLocationId = localStorage.getItem('locationId');
+  
+  if (savedStaff) document.getElementById('staffName').value = savedStaff;
 
-  const locationSelect = document.getElementById('location');
-  locations.forEach(loc => {
-    const option = document.createElement('option');
-    option.value = loc.id;
-    option.textContent = loc.name;
-    locationSelect.appendChild(option);
-  });
+  const locationSelect = document.getElementById('location');
   
-  if (savedLocationId) {
-    locationSelect.value = savedLocationId;
+  // 1. 読み込み中の表示に変更
+  locationSelect.innerHTML = '<option value="">地点マスター読込中...</option>';
+  locationSelect.disabled = true;
+
+  try {
+    // 2. Firestoreの 'locations_master' から 'id' 順でデータを取得
+    const snapshot = await firestore.collection("locations_master")
+                                    .orderBy("id", "asc")
+                                    .get();
+
+    if (snapshot.empty) {
+      console.error("地点マスターが空です。");
+      locationSelect.innerHTML = '<option value="">地点取得失敗</option>';
+      return;
+    }
+
+    // 3. 取得したデータでグローバル変数とプルダウンを生成
+    locations = []; // グローバル配列をリセット
+    locationSelect.innerHTML = '<option value="">地点を選択</option>'; // プルダウンをリセット
+
+    snapshot.forEach(doc => {
+      const loc = doc.data();
+      locations.push(loc); // グローバル配列に格納
+
+      // プルダウンに <option> を追加
+      const option = document.createElement('option');
+      option.value = loc.id;
+      option.textContent = loc.name;
+      locationSelect.appendChild(option);
+    });
+    
+    // 4. 保存されていた地点を復元
+    if (savedLocationId) {
+      locationSelect.value = savedLocationId;
+    }
+
+  } catch (err) {
+    console.error("地点マスターの読み込みに失敗しました:", err);
+    locationSelect.innerHTML = '<option value="">読込エラー</option>';
+  } finally {
+    // 5. 処理完了後、プルダウンを有効化
+    locationSelect.disabled = false;
   }
 }
-// ▲▲▲ window.onload 関数全体をこの関数に置き換える ▲▲▲
+// ▲▲▲ initializeAppLogic 関数の置き換え完了 ▲▲▲
 
 
 /**
