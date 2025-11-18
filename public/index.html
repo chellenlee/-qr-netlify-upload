@@ -233,52 +233,55 @@ function startApp() {
 }
 
 /**
- * QRコードスキャナーを開始する (修正版)
- */
+ * QRコードスキャナーを開始する (修正版)
+ */
 function startScanner() {
-  const video = document.getElementById('video');
-  if (!codeReader) {
-    codeReader = new ZXing.BrowserQRCodeReader();
-  }
-  document.getElementById('message').textContent = '読み取り中...';
+  const video = document.getElementById('video');
+  if (!codeReader) {
+    codeReader = new ZXing.BrowserQRCodeReader();
+  }
+  document.getElementById('message').textContent = '読み取り中...';
 
-  // コールバック関数
-  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => { 
-    if (result) {
-      codeReader.reset();
-      document.getElementById('message').textContent = '読み取り成功';
+  // コールバック関数
+  codeReader.decodeFromVideoDevice(undefined, video, (result, err) => { 
+    if (result) {
+      codeReader.reset();
+      document.getElementById('message').textContent = '読み取り成功';
 
-      const text = result.text.trim();
-      const parts = text.split('/');
-      
-      if (parts.length >= 4) {
-        const [division, bibNumber, runnerName, gender] = parts;
-        
-        const scanTimeObject = new Date();
-        
-        const scanData = {
-          id: selectedLocationId,
-          name: selectedLocationName,
-          division,
-          bibNumber,
-          runnerName,
-          gender,
-          scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
-          date: scanTimeObject.toLocaleDateString('ja-JP'),
-          time: scanTimeObject.toLocaleTimeString('ja-JP'),
-          staff,
-          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp()
-        };
+      const text = result.text.trim();
+      const parts = text.split('/');
+      
+      // ▼▼▼ 変更箇所ここから ▼▼▼
+      if (parts.length >= 4) {
+        // 5番目の startTime がない場合は空文字 ('') をセットする記述に変更
+        const [division, bibNumber, runnerName, gender, startTime = ''] = parts;
+        
+        const scanTimeObject = new Date();
+        
+        const scanData = {
+          id: selectedLocationId,
+          name: selectedLocationName,
+          division,
+          bibNumber,
+          runnerName,
+          gender,
+          startTime, // ★ここに追加（保存データに含める）
+          scanTimestamp: firebase.firestore.Timestamp.fromDate(scanTimeObject),
+          date: scanTimeObject.toLocaleDateString('ja-JP'),
+          time: scanTimeObject.toLocaleTimeString('ja-JP'),
+          staff,
+          serverTimestamp: firebase.firestore.FieldValue.serverTimestamp()
+        };
+      // ▲▲▲ 変更箇所ここまで ▲▲▲
 
-        showPopup(scanData); 
-      } else {
-        document.getElementById('message').textContent = '無効なQRコードです';
-        setTimeout(startScanner, 1000);
-      }
-    }
-  }, { video: { facingMode: "environment" } });
+        showPopup(scanData); 
+      } else {
+        document.getElementById('message').textContent = '無効なQRコードです';
+        setTimeout(startScanner, 1000);
+      }
+    }
+  }, { video: { facingMode: "environment" } });
 }
-
 /**
  * 読み取り結果のポップアップを表示する
  */
