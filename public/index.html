@@ -65,7 +65,7 @@
     }
     /* 履歴ボタンは少し色を変えて区別（青系） */
     .history-button {
-      background: linear-gradient(#4a90e2, #003366);
+      background: linear-gradient(#888888, #666666);
     }
 
     .save-button:active, .start-button:active, .history-button:active {
@@ -73,21 +73,24 @@
       transform: translateY(3px);
     }
 
-    /* 履歴テーブルのスタイル */
+    /* 履歴テーブルのスタイル（5列表示用に調整） */
     .history-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       background: white;
-      font-size: 16px;
+      font-size: 13px; /* 5列入るよう文字を小さく */
     }
     .history-table th, .history-table td {
       border: 1px solid #ccc;
-      padding: 8px;
+      padding: 4px;    /* 余白を詰める */
       text-align: center;
+      line-height: 1.2;
     }
     .history-table th {
       background-color: #eee;
+      white-space: nowrap; /* ヘッダー折り返しなし */
+      font-size: 12px;
     }
 
     #popup-overlay {
@@ -263,7 +266,7 @@ function startApp() {
 }
 
 /**
- * ▼▼▼ 履歴を表示する関数 (新規追加) ▼▼▼
+ * ▼▼▼ 履歴を表示する関数 (レイアウト調整版) ▼▼▼
  */
 async function showHistory() {
   const staffInput = document.getElementById('staffName').value.trim();
@@ -296,26 +299,25 @@ async function showHistory() {
     }
 
     // JavaScript側で日付順（新しい順）にソート
-    // (Firestoreの複合インデックス設定の手間を避けるため)
     let docs = snapshot.docs.map(doc => doc.data());
     docs.sort((a, b) => {
-      // scanTimestampがあればそれを使う、なければ文字列のdate/timeで比較
       const tA = a.scanTimestamp ? a.scanTimestamp.toMillis() : 0;
       const tB = b.scanTimestamp ? b.scanTimestamp.toMillis() : 0;
       return tB - tA; // 降順
     });
 
-    // テーブル作成
+    // ▼▼▼ テーブルヘッダーと内容を更新（地点・部門・ゼッケン・氏名・時間） ▼▼▼
     let html = '<table class="history-table">';
-    html += '<tr><th>時間</th><th>地点</th><th>ゼッケン</th></tr>';
+    html += '<tr><th>地点</th><th>部門</th><th>No.</th><th>氏名</th><th>時間</th></tr>';
     
     docs.forEach(d => {
-      // 表示用の時刻（秒なし）
       const displayTime = d.time ? d.time.substring(0, 5) : '--:--';
       html += `<tr>
-        <td>${displayTime}</td>
-        <td>${d.name}</td>
+        <td style="text-align:left;">${d.name}</td>
+        <td>${d.division}</td>
         <td>${d.bibNumber}</td>
+        <td style="text-align:left;">${d.runnerName}</td>
+        <td>${displayTime}</td>
       </tr>`;
     });
     html += '</table>';
