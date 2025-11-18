@@ -29,7 +29,7 @@
       text-align: center;
     }
     /* 画面エリア */
-    #setup, #reader, #result, #history-view, #stats-view { margin: 20px; }
+    #setup, #reader, #result, #history-view, #stats-view, #report-view { margin: 20px; }
     
     #setup input, #setup select {
       text-align: left;
@@ -49,7 +49,7 @@
     #message { font-size: 22px; font-weight: bold; color: green; margin: 15px; }
 
     /* ボタンのデザイン */
-    .save-button, .start-button, .history-button, .stats-button {
+    .save-button, .start-button, .history-button, .stats-button, .report-button {
       color: white;
       border: none;
       padding: 10px 20px;
@@ -63,37 +63,40 @@
     .save-button, .start-button {
       background: linear-gradient(#888888, #666666);
     }
-    /* 履歴・統計ボタン（青系） */
-    .history-button, .stats-button {
+    /* 機能系ボタン（青系） */
+    .history-button, .stats-button, .report-button {
       background: linear-gradient(#4a90e2, #003366);
     }
 
-    .save-button:active, .start-button:active, .history-button:active, .stats-button:active {
+    .save-button:active, .start-button:active, .history-button:active, .stats-button:active, .report-button:active {
       box-shadow: 0 2px #444444;
       transform: translateY(3px);
     }
 
     /* テーブル共通スタイル */
-    .history-table, .stats-table {
+    .history-table, .stats-table, .report-table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       background: white;
       font-size: 13px;
     }
-    .history-table th, .history-table td, .stats-table th, .stats-table td {
+    .history-table th, .history-table td, 
+    .stats-table th, .stats-table td,
+    .report-table th, .report-table td {
       border: 1px solid #ccc;
       padding: 4px;
       text-align: center;
       line-height: 1.2;
     }
-    .history-table th, .stats-table th {
+    .history-table th, .stats-table th, .report-table th {
       background-color: #eee;
       white-space: nowrap;
       font-size: 12px;
     }
-    /* 統計テーブル特有の調整 */
+    /* 各テーブルのヘッダー色分け */
     .stats-table th { background-color: #d0e0f0; }
+    .report-table th { background-color: #ffe0b2; }
 
     #popup-overlay {
       position: fixed;
@@ -134,6 +137,8 @@
   <button class="start-button" onclick="startApp()">開始</button>
   <br>
   <button class="history-button" onclick="showHistory()">履歴確認</button>
+  <button class="report-button" onclick="showReport()">経過速報</button>
+  <br>
   <button class="stats-button" onclick="showStats()">通過情報</button>
 </div>
 
@@ -150,6 +155,18 @@
   <div id="stats-list">集計中...</div>
   <br>
   <button class="save-button" onclick="closeStats()">戻る</button>
+</div>
+
+<div id="report-view" style="display:none;">
+  <h3>経過速報</h3>
+  <div style="text-align: center; margin-bottom: 10px;">
+    <select id="report-division-select" onchange="updateReportView()" style="width: 90%; font-size: 18px;">
+      <option value="">部門を選択...</option>
+    </select>
+  </div>
+  <div id="report-list">データ読込中...</div>
+  <br>
+  <button class="save-button" onclick="closeReport()">戻る</button>
 </div>
 
 <div id="reader" style="display:none;">
@@ -184,6 +201,8 @@ let selectedLocationId = '';
 let selectedLocationName = '';
 let codeReader = null;
 let locations = []; 
+// 速報用の一時データ保持
+let allScanDataForReport = [];
 
 const firebaseConfig = {
   apiKey: "AIzaSyD_Aic5iQ7OYGO9qTv0patspCKbwsuYcs8",
@@ -196,9 +215,6 @@ const firebaseConfig = {
 
 // ▼▼▼ 2. 関数定義 ▼▼▼
 
-/**
- * アプリの初期化ロジック
- */
 async function initializeAppLogic() {
   const savedStaff = localStorage.getItem('staffName');
   const savedLocationId = localStorage.getItem('locationId');
@@ -246,9 +262,6 @@ async function initializeAppLogic() {
   }
 }
 
-/**
- * アプリ（スキャナー画面）を開始する
- */
 function startApp() {
   staff = document.getElementById('staffName').value.trim();
   const locationId = document.getElementById('location').value;
@@ -276,9 +289,7 @@ function startApp() {
   startScanner();
 }
 
-/**
- * 履歴を表示する関数
- */
+// --- 履歴系関数 ---
 async function showHistory() {
   const staffInput = document.getElementById('staffName').value.trim();
   if (!staffInput) {
@@ -289,15 +300,11 @@ async function showHistory() {
     });
     return;
   }
-
-  if (codeReader) {
-    codeReader.reset();
-  }
+  if (codeReader) codeReader.reset();
 
   document.getElementById('setup').style.display = 'none';
   document.getElementById('reader').style.display = 'none'; 
   document.getElementById('result').style.display = 'none';
-
   document.getElementById('history-view').style.display = 'block';
   document.getElementById('history-staff-display').textContent = staffInput;
   
@@ -326,7 +333,6 @@ async function showHistory() {
     
     docs.forEach(d => {
       const displayTime = d.time || '--:--:--';
-      
       html += `<tr>
         <td style="text-align:left;">${d.name}</td>
         <td>${d.division}</td>
@@ -337,28 +343,22 @@ async function showHistory() {
     });
     html += '</table>';
     html += `<p style="text-align:right; font-size:14px;">件数: ${docs.length}件</p>`;
-
     listDiv.innerHTML = html;
-
   } catch (error) {
     console.error("履歴取得エラー:", error);
-    listDiv.innerHTML = '<p style="color:red;">履歴の取得に失敗しました。<br>通信環境を確認してください。</p>';
+    listDiv.innerHTML = '<p style="color:red;">履歴の取得に失敗しました。</p>';
   }
 }
 
-/**
- * 履歴画面を閉じる関数
- */
 function closeHistory() {
   document.getElementById('history-view').style.display = 'none';
   document.getElementById('setup').style.display = '';
 }
 
 /**
- * ▼▼▼ 通過情報（統計）を表示する関数 (未通過数の計算修正版) ▼▼▼
+ * ▼▼▼ 1. 通過情報（統計）を表示する関数 (スタートID=2 固定版) ▼▼▼
  */
 async function showStats() {
-  // 画面遷移
   document.getElementById('setup').style.display = 'none';
   document.getElementById('reader').style.display = 'none';
   document.getElementById('result').style.display = 'none';
@@ -368,19 +368,16 @@ async function showStats() {
   listDiv.innerHTML = '全データを集計中...';
 
   try {
-    // 1. スキャンデータを全取得
     const snapshot = await firestore.collection('scans').get();
     
-    // 2. 地点IDごとにカウント
     const counts = {};
-    let totalRetire = 0; // 全リタイヤ数
+    let totalRetire = 0;
 
     snapshot.forEach(doc => {
       const d = doc.data();
       const lid = d.id;
       const lname = d.name || "";
 
-      // リタイヤ判定（地点名に「リタイヤ」が含まれるか）
       if (lname.includes("リタイヤ") || lname.includes("リタイア")) {
         totalRetire++;
       } else {
@@ -389,31 +386,22 @@ async function showStats() {
       }
     });
 
-    // 3. 表示用テーブルの生成
     let html = '<table class="stats-table">';
     html += '<tr><th>地点</th><th>通過</th><th>未通過</th><th>リタイヤ</th></tr>';
 
-    // 全体総数（最初の地点の通過数）を取得
-    // ※locations[0]がスタート地点であると仮定
-    let totalRunners = 0;
-    if (locations.length > 0) {
-      totalRunners = counts[locations[0].id] || 0;
-    }
+    // ★変更点: スタート地点IDを「2」に固定して総数を取得
+    const startLocationId = "2";
+    let totalRunners = counts[startLocationId] || 0;
 
-    // 各地点についてループ
     locations.forEach((loc) => {
-      // リタイヤ地点は行見出しから除外
       if (loc.name.includes("リタイヤ") || loc.name.includes("リタイア")) {
         return;
       }
 
       const passed = counts[loc.id] || 0;
       
-      // ▼▼▼ 修正箇所：未通過数からリタイヤ数を引く ▼▼▼
-      // 未通過 = 参加総数(スタート) - 現在地通過数 - リタイヤ総数
+      // 未通過 = 参加総数(ID:2) - 現在地通過数 - リタイヤ総数
       let unpassed = totalRunners - passed - totalRetire;
-      
-      // データ不整合などでマイナスになる場合は0にする
       if (unpassed < 0) unpassed = 0;
 
       html += `<tr>
@@ -425,27 +413,206 @@ async function showStats() {
     });
 
     html += '</table>';
-    html += `<p style="text-align:right; font-size:14px; color:#666;">※未通過数 = スタート数 - 通過済 - リタイヤ</p>`;
-
+    html += `<p style="text-align:right; font-size:14px; color:#666;">※未通過数 = スタート数(ID:2)基準</p>`;
     listDiv.innerHTML = html;
 
   } catch (error) {
     console.error("集計エラー:", error);
-    listDiv.innerHTML = '<p style="color:red;">データの集計に失敗しました。<br>通信環境を確認してください。</p>';
+    listDiv.innerHTML = '<p style="color:red;">データの集計に失敗しました。</p>';
   }
 }
-  
-/**
- * 通過情報画面を閉じる関数
- */
 function closeStats() {
   document.getElementById('stats-view').style.display = 'none';
   document.getElementById('setup').style.display = '';
 }
 
 /**
- * QRコードスキャナーを開始する
+ * ▼▼▼ 2. 経過速報機能 (スタートID=2 実測タイム利用版) ▼▼▼
  */
+async function showReport() {
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('reader').style.display = 'none';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('report-view').style.display = 'block';
+
+  const listDiv = document.getElementById('report-list');
+  listDiv.innerHTML = '全データを解析中...';
+  
+  const select = document.getElementById('report-division-select');
+  select.innerHTML = '<option value="">部門を抽出中...</option>';
+
+  try {
+    const snapshot = await firestore.collection('scans').get();
+    if (snapshot.empty) {
+      listDiv.innerHTML = '<p>データがありません。</p>';
+      select.innerHTML = '<option value="">データなし</option>';
+      return;
+    }
+
+    const locationIndexMap = {};
+    locations.forEach((loc, index) => {
+      locationIndexMap[loc.id] = index;
+    });
+
+    // ★変更点: スタート地点IDを「2」に設定
+    const startLocationId = "2";
+    const runnerMap = new Map();
+
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      const bib = d.bibNumber;
+      const currentIndex = locationIndexMap[d.id] !== undefined ? locationIndexMap[d.id] : -1;
+      const scanDate = d.scanTimestamp ? d.scanTimestamp.toDate() : null;
+
+      if (!runnerMap.has(bib)) {
+        runnerMap.set(bib, {
+          latestData: d,
+          // IDが2ならそれをスタート時間として保持、違えばnull
+          startScanTime: (d.id == startLocationId) ? scanDate : null,
+          _locationIndex: currentIndex
+        });
+      } else {
+        const entry = runnerMap.get(bib);
+
+        // 1. スタート地点(ID:2)のデータを見つけたら時刻を保存
+        if (d.id == startLocationId) {
+          entry.startScanTime = scanDate;
+        }
+
+        // 2. より先の地点なら最新データを更新
+        if (currentIndex > entry._locationIndex) {
+          entry.latestData = d;
+          entry._locationIndex = currentIndex;
+        }
+        // 同一地点なら新しい時間を採用
+        else if (currentIndex === entry._locationIndex) {
+           const currentTs = scanDate ? scanDate.getTime() : 0;
+           const existingTs = entry.latestData.scanTimestamp ? entry.latestData.scanTimestamp.toMillis() : 0;
+           if (currentTs > existingTs) {
+             entry.latestData = d;
+           }
+        }
+      }
+    });
+
+    // マップから配列に変換
+    allScanDataForReport = Array.from(runnerMap.values()).map(entry => {
+      return {
+        ...entry.latestData,
+        _realStartTime: entry.startScanTime, // スタート地点での実測日時
+        _locationIndex: entry._locationIndex
+      };
+    });
+
+    const divisions = new Set(allScanDataForReport.map(d => d.division));
+    const sortedDivisions = Array.from(divisions).sort();
+    
+    select.innerHTML = '<option value="">部門を選択...</option>';
+    sortedDivisions.forEach(div => {
+      const opt = document.createElement('option');
+      opt.value = div;
+      opt.textContent = div;
+      select.appendChild(opt);
+    });
+
+    listDiv.innerHTML = '<p>上のボックスから部門を選択してください。</p>';
+
+  } catch (error) {
+    console.error("速報データ取得エラー:", error);
+    listDiv.innerHTML = '<p style="color:red;">データの取得に失敗しました。</p>';
+  }
+}
+
+/**
+ * ▼▼▼ 3. 経過時間を計算するヘルパー関数（30分丸め版） ▼▼▼
+ */
+function calculateElapsedTime(currentDateObj, startScanDateObj) {
+  if (!currentDateObj || !startScanDateObj) return "--:--";
+
+  // 1. スタート時間を30分単位に丸める (四捨五入)
+  // 30分 = 30 * 60 * 1000 ミリ秒
+  const MS_PER_30_MIN = 30 * 60 * 1000;
+  
+  // getTime()でミリ秒にし、30分単位で割って四捨五入し、また掛け戻す
+  const roundedStartMs = Math.round(startScanDateObj.getTime() / MS_PER_30_MIN) * MS_PER_30_MIN;
+  const roundedStartDate = new Date(roundedStartMs);
+
+  // 2. 経過時間を計算
+  const diffMs = currentDateObj - roundedStartDate;
+  
+  if (diffMs < 0) return "Start前"; 
+
+  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  // ゼロ埋め
+  const hStr = String(diffHrs).padStart(2, '0');
+  const mStr = String(diffMins).padStart(2, '0');
+
+  return `${hStr}:${mStr}`;
+}
+
+/**
+ * ▼▼▼ 4. プルダウン変更時の表示更新 ▼▼▼
+ */
+function updateReportView() {
+  const select = document.getElementById('report-division-select');
+  const selectedDiv = select.value;
+  const listDiv = document.getElementById('report-list');
+
+  if (!selectedDiv) {
+    listDiv.innerHTML = '<p>部門を選択してください。</p>';
+    return;
+  }
+
+  let filtered = allScanDataForReport.filter(d => d.division === selectedDiv);
+
+  // ソート: 1. 地点ID順(降順) 2. 経過時間(昇順)
+  filtered.sort((a, b) => {
+    if (b._locationIndex !== a._locationIndex) {
+      return b._locationIndex - a._locationIndex; 
+    }
+    const tA = a.scanTimestamp ? a.scanTimestamp.toMillis() : 0;
+    const tB = b.scanTimestamp ? b.scanTimestamp.toMillis() : 0;
+    return tA - tB; 
+  });
+
+  let html = '<table class="report-table">';
+  html += '<tr><th>No.</th><th>氏名</th><th>地点</th><th>経過</th></tr>';
+
+  filtered.forEach(d => {
+    let elapsedTime = "--:--";
+    
+    // 現在地点のタイムスタンプ
+    const currentObj = d.scanTimestamp ? d.scanTimestamp.toDate() : null;
+    
+    // スタート地点のスキャン時刻 (_realStartTime) がある場合のみ計算
+    if (currentObj && d._realStartTime) {
+      elapsedTime = calculateElapsedTime(currentObj, d._realStartTime);
+    } else if (!d._realStartTime) {
+        elapsedTime = "Start未"; // スタート未通過
+    }
+
+    html += `<tr>
+      <td>${d.bibNumber}</td>
+      <td style="text-align:left;">${d.runnerName}</td>
+      <td style="text-align:left;">${d.name}</td>
+      <td>${elapsedTime}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  html += `<p style="text-align:right; font-size:14px;">該当: ${filtered.length}名</p>`;
+
+  listDiv.innerHTML = html;
+}
+
+function closeReport() {
+  document.getElementById('report-view').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+}
+// --- ▲▲▲ 経過速報機能ここまで ▲▲▲ ---
+
+
 function startScanner() {
   const video = document.getElementById('video');
   if (!codeReader) {
@@ -490,9 +657,6 @@ function startScanner() {
   }, { video: { facingMode: "environment" } });
 }
 
-/**
- * 読み取り結果のポップアップを表示する
- */
 function showPopup(scanData) {
   const overlay = document.getElementById('popup-overlay');
   const title = document.getElementById('popup-title');
@@ -527,17 +691,11 @@ function showPopup(scanData) {
   overlay.style.display = 'flex';
 }
 
-/**
- * スキャンを続行する
- */
 function continueScan() {
   document.getElementById('popup-overlay').style.display = 'none';
   startScanner(); 
 }
 
-/**
- * アプリを終了し、設定画面に戻る
- */
 function endApp() {
   if (codeReader) {
     codeReader.reset();
@@ -548,9 +706,6 @@ function endApp() {
   document.getElementById('result').style.display = 'none';
 }
 
-/**
- * 読み取りデータをFirebase Firestoreにアップロードする
- */
 async function uploadToFirebase(data) {
   if (!firestore) {
     console.error("Firestore is not initialized.");
@@ -583,9 +738,6 @@ async function uploadToFirebase(data) {
   }
 }
 
-/**
- * 汎用的なカスタムポップアップ
- */
 function showCustomPopup({ title = "", message = "", buttons = [], callback = null }) {
   const overlay = document.getElementById('popup-overlay');
   const popup = document.getElementById('popup');
